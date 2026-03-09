@@ -34,7 +34,7 @@ export const amikoPlugin = {
     threads: false,
     polls: false,
     nativeCommands: false,
-    blockStreaming: true,
+    blockStreaming: false,
   },
 
   reload: {
