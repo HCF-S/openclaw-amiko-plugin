@@ -1,0 +1,25 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://openclaw.dev/schemas/amiko/platform-ack.schema.json",
+  "title": "AmikoAckPayload",
+  "description": "Request body schema for POST /internal/openclaw/amiko/acks. OCP-002.",
+  "type": "object",
+  "required": ["accountId", "cursor", "eventIds"],
+  "additionalProperties": false,
+  "properties": {
+    "accountId": {
+      "type": "string",
+      "description": "Account scope. Must match the Bearer token's account."
+    },
+    "cursor": {
+      "type": "string",
+      "description": "Cursor of the last event in the acknowledged batch."
+    },
+    "eventIds": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 1,
+      "description": "IDs of all events in the acknowledged batch."
+    }
+  }
+}

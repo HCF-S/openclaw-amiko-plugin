@@ -1,0 +1,87 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://openclaw.dev/schemas/amiko/platform-events.schema.json",
+  "title": "AmikoEventsResponse",
+  "description": "Response schema for GET /internal/openclaw/amiko/events. OCP-002.",
+  "type": "object",
+  "required": ["events", "nextCursor", "hasMore"],
+  "additionalProperties": false,
+  "properties": {
+    "events": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/AmikoInboundEvent" }
+    },
+    "nextCursor": {
+      "type": ["string", "null"],
+      "description": "Cursor to use in the next poll. Null when no events returned."
+    },
+    "hasMore": {
+      "type": "boolean",
+      "description": "True if more events exist beyond the returned limit."
+    }
+  },
+  "$defs": {
+    "AmikoInboundEvent": {
+      "type": "object",
+      "required": ["id", "type", "accountId", "conversationId", "conversationType", "senderId", "senderName", "timestamp", "cursor"],
+      "additionalProperties": true,
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Stable globally unique event ID for deduplication."
+        },
+        "type": {
+          "type": "string",
+          "enum": ["message.text", "message.image", "participant.added"],
+          "description": "Event type."
+        },
+        "accountId": {
+          "type": "string",
+          "description": "Account this event belongs to."
+        },
+        "conversationId": {
+          "type": "string",
+          "description": "Platform conversation identifier."
+        },
+        "conversationType": {
+          "type": "string",
+          "enum": ["direct", "group"],
+          "description": "Direct or group conversation."
+        },
+        "senderId": {
+          "type": "string",
+          "description": "Platform user ID of the sender."
+        },
+        "senderName": {
+          "type": "string",
+          "description": "Display name of the sender at send time."
+        },
+        "timestamp": {
+          "type": "integer",
+          "description": "Unix timestamp in milliseconds."
+        },
+        "cursor": {
+          "type": "string",
+          "description": "Monotonic cursor value for this event."
+        },
+        "text": {
+          "type": "string",
+          "description": "Message text body. Present for message.text type."
+        },
+        "mediaUrl": {
+          "type": "string",
+          "format": "uri",
+          "description": "Signed media URL. Present for message.image type."
+        },
+        "mediaCaption": {
+          "type": "string",
+          "description": "Optional caption for media messages."
+        },
+        "mentionsBot": {
+          "type": "boolean",
+          "description": "True if the message includes a @mention of the bot. Used for group routing."
+        }
+      }
+    }
+  }
+}

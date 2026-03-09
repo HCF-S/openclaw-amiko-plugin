@@ -1,0 +1,97 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://openclaw.dev/schemas/amiko/channel-config.schema.json",
+  "title": "AmikoChannelConfig",
+  "description": "Schema for channels.amiko in OpenClaw config. OCP-001.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "token": {
+      "type": "string",
+      "description": "Bearer token for amiko-platform API authentication. Sensitive.",
+      "uiHints": { "sensitive": true }
+    },
+    "apiBaseUrl": {
+      "type": "string",
+      "format": "uri",
+      "description": "Base URL of amiko-platform internal API.",
+      "default": "https://api.amiko.app"
+    },
+    "name": {
+      "type": "string",
+      "description": "Human-readable account label."
+    },
+    "enabled": {
+      "type": "boolean",
+      "description": "Whether this account is active. Defaults to true.",
+      "default": true
+    },
+    "dmPolicy": {
+      "type": "string",
+      "enum": ["allowlist", "open", "disabled"],
+      "description": "Direct message authorization policy.",
+      "default": "allowlist"
+    },
+    "allowFrom": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Sender IDs allowed to DM when dmPolicy=allowlist.",
+      "default": []
+    },
+    "groupPolicy": {
+      "type": "string",
+      "enum": ["disabled", "allowlist", "open"],
+      "description": "Group chat authorization policy.",
+      "default": "disabled"
+    },
+    "groupAllowFrom": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Sender IDs allowed in groups when groupPolicy=allowlist.",
+      "default": []
+    },
+    "pollIntervalMs": {
+      "type": "integer",
+      "minimum": 1000,
+      "maximum": 60000,
+      "description": "Polling interval in milliseconds.",
+      "default": 3000
+    },
+    "pollTimeoutMs": {
+      "type": "integer",
+      "minimum": 1000,
+      "maximum": 30000,
+      "description": "Per-request HTTP timeout in milliseconds.",
+      "default": 10000
+    },
+    "defaultAccount": {
+      "type": "string",
+      "description": "Which account key to treat as default in multi-account mode."
+    },
+    "accounts": {
+      "type": "object",
+      "description": "Per-account config overrides keyed by accountId.",
+      "additionalProperties": {
+        "$ref": "#/$defs/AmikoAccountConfig"
+      }
+    }
+  },
+  "$defs": {
+    "AmikoAccountConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "token": { "type": "string", "uiHints": { "sensitive": true } },
+        "apiBaseUrl": { "type": "string", "format": "uri" },
+        "name": { "type": "string" },
+        "enabled": { "type": "boolean" },
+        "dmPolicy": { "type": "string", "enum": ["allowlist", "open", "disabled"] },
+        "allowFrom": { "type": "array", "items": { "type": "string" } },
+        "groupPolicy": { "type": "string", "enum": ["disabled", "allowlist", "open"] },
+        "groupAllowFrom": { "type": "array", "items": { "type": "string" } },
+        "pollIntervalMs": { "type": "integer", "minimum": 1000, "maximum": 60000 },
+        "pollTimeoutMs": { "type": "integer", "minimum": 1000, "maximum": 30000 }
+      }
+    }
+  }
+}

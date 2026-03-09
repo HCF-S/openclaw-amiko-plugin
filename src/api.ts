@@ -1,0 +1,93 @@
+import type {
+  AmikoEventsResponse,
+  AmikoAckPayload,
+  AmikoOutboundPayload,
+  AmikoOutboundResponse,
+} from "./types.js";
+
+export type AmikoApiOptions = {
+  apiBaseUrl: string;
+  token: string;
+  timeoutMs?: number;
+};
+
+export class AmikoApiError extends Error {
+  constructor(
+    message: string,
+    public readonly statusCode: number,
+    public readonly retriable: boolean,
+  ) {
+    super(message);
+    this.name = "AmikoApiError";
+  }
+}
+
+async function apiRequest<T>(
+  method: "GET" | "POST",
+  url: string,
+  options: AmikoApiOptions,
+  body?: unknown,
+): Promise<T> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), options.timeoutMs ?? 10_000);
+
+  try {
+    const res = await fetch(url, {
+      method,
+      headers: {
+        Authorization: `Bearer ${options.token}`,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+      signal: controller.signal,
+    });
+
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      const retriable = res.status === 429 || res.status >= 500;
+      throw new AmikoApiError(`HTTP ${res.status}: ${text}`, res.status, retriable);
+    }
+
+    if (res.status === 204) return undefined as T;
+    return res.json() as Promise<T>;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+export async function fetchAmikoEvents(
+  options: AmikoApiOptions,
+  params: { accountId: string; cursor?: string; limit?: number },
+): Promise<AmikoEventsResponse> {
+  const url = new URL(`${options.apiBaseUrl}/internal/openclaw/amiko/events`);
+  url.searchParams.set("accountId", params.accountId);
+  if (params.cursor) url.searchParams.set("cursor", params.cursor);
+  if (params.limit != null) url.searchParams.set("limit", String(params.limit));
+
+  return apiRequest<AmikoEventsResponse>("GET", url.toString(), options);
+}
+
+export async function ackAmikoEvents(
+  options: AmikoApiOptions,
+  payload: AmikoAckPayload,
+): Promise<void> {
+  await apiRequest<void>(
+    "POST",
+    `${options.apiBaseUrl}/internal/openclaw/amiko/acks`,
+    options,
+    payload,
+  );
+}
+
+export async function sendAmikoOutbound(
+  options: AmikoApiOptions,
+  payload: AmikoOutboundPayload,
+): Promise<AmikoOutboundResponse> {
+  return apiRequest<AmikoOutboundResponse>(
+    "POST",
+    `${options.apiBaseUrl}/internal/openclaw/amiko/messages`,
+    options,
+    payload,
+  );
+}
