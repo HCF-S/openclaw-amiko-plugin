@@ -7,8 +7,8 @@ export type AmikoAccountConfig = {
   allowFrom?: string[];
   groupPolicy?: "disabled" | "allowlist" | "open";
   groupAllowFrom?: string[];
-  pollIntervalMs?: number;
-  pollTimeoutMs?: number;
+  webhookPath?: string;
+  webhookSecret?: string;
 };
 
 export type AmikoConfig = {
@@ -38,23 +38,14 @@ export type AmikoInboundEvent = {
   senderId: string;
   senderName: string;
   timestamp: number; // Unix ms
-  cursor: string;
   text?: string;
   mediaUrl?: string;
   mediaCaption?: string;
   mentionsBot?: boolean;
 };
 
-export type AmikoEventsResponse = {
-  events: AmikoInboundEvent[];
-  nextCursor: string | null;
-  hasMore: boolean;
-};
-
-export type AmikoAckPayload = {
-  accountId: string;
-  cursor: string;
-  eventIds: string[];
+export type AmikoWebhookPayload = {
+  event: AmikoInboundEvent;
 };
 
 export type AmikoOutboundPayload = {

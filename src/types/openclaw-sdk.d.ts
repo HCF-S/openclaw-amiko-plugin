@@ -199,9 +199,33 @@ declare module "openclaw/plugin-sdk" {
     };
   }
 
+  export interface HttpRouteRequest {
+    method: string;
+    url: string;
+    headers: Record<string, string | string[] | undefined>;
+    body: Buffer | string | undefined;
+    json(): unknown;
+  }
+
+  export interface HttpRouteResponse {
+    status(code: number): HttpRouteResponse;
+    json(body: unknown): void;
+    send(body?: string): void;
+    end(): void;
+  }
+
+  export interface HttpRouteOptions {
+    path: string;
+    auth: "plugin" | "gateway";
+    match?: "exact" | "prefix";
+    replaceExisting?: boolean;
+    handler: (req: HttpRouteRequest, res: HttpRouteResponse) => boolean | Promise<boolean>;
+  }
+
   export interface OpenClawPluginApi {
     runtime: PluginRuntime;
     registerChannel(params: { plugin: ChannelPlugin<unknown> }): void;
+    registerHttpRoute(options: HttpRouteOptions): void;
   }
 
   export interface OpenClawPlugin {

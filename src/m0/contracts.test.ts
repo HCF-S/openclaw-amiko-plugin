@@ -372,13 +372,11 @@ describe("OCP-002: Event payload structure", () => {
       senderId: "user_1",
       senderName: "Alice",
       timestamp: 1741478400000,
-      cursor: "cur_xyz",
       text: "Hello!",
     };
     assert.ok(event.id);
     assert.ok(event.type === "message.text");
     assert.ok(typeof event.timestamp === "number");
-    assert.ok(event.cursor);
   });
 
   it("group event has mentionsBot field", () => {
@@ -391,7 +389,6 @@ describe("OCP-002: Event payload structure", () => {
       senderId: "user_1",
       senderName: "Bob",
       timestamp: 1741478400001,
-      cursor: "cur_xyz2",
       text: "@bot help me",
       mentionsBot: true,
     };
@@ -406,5 +403,31 @@ describe("OCP-002: Event payload structure", () => {
     const key = `${accountId}:${conversationId}:${uuid}`;
     assert.equal(key, "prod:conv_abc:550e8400-e29b-41d4-a716-446655440000");
     assert.ok(key.startsWith(`${accountId}:${conversationId}:`));
+  });
+
+  it("webhook payload wraps event under 'event' key", () => {
+    const event = {
+      id: "evt_003",
+      type: "message.text",
+      accountId: "prod",
+      conversationId: "conv_abc",
+      conversationType: "direct",
+      senderId: "user_1",
+      senderName: "Alice",
+      timestamp: 1741478400002,
+      text: "Hi from webhook",
+    };
+    const payload = { event };
+    assert.ok(payload.event);
+    assert.equal(payload.event.id, "evt_003");
+    assert.equal(payload.event.type, "message.text");
+    // No cursor field in webhook events
+    assert.equal("cursor" in payload.event, false);
+  });
+
+  it("webhook default path format is /amiko/webhook/<accountId>", () => {
+    const accountId = "prod";
+    const defaultPath = `/amiko/webhook/${accountId}`;
+    assert.equal(defaultPath, "/amiko/webhook/prod");
   });
 });

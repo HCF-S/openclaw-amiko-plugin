@@ -37,8 +37,8 @@ export function resolveAmikoAccountConfig(
       allowFrom: amiko.allowFrom,
       groupPolicy: amiko.groupPolicy,
       groupAllowFrom: amiko.groupAllowFrom,
-      pollIntervalMs: amiko.pollIntervalMs,
-      pollTimeoutMs: amiko.pollTimeoutMs,
+      webhookPath: amiko.webhookPath,
+      webhookSecret: amiko.webhookSecret,
     };
   }
   const perAccount = amiko.accounts[accountId] ?? {};
@@ -51,8 +51,8 @@ export function resolveAmikoAccountConfig(
     allowFrom: perAccount.allowFrom ?? amiko.allowFrom,
     groupPolicy: perAccount.groupPolicy ?? amiko.groupPolicy,
     groupAllowFrom: perAccount.groupAllowFrom ?? amiko.groupAllowFrom,
-    pollIntervalMs: perAccount.pollIntervalMs ?? amiko.pollIntervalMs,
-    pollTimeoutMs: perAccount.pollTimeoutMs ?? amiko.pollTimeoutMs,
+    webhookPath: perAccount.webhookPath ?? amiko.webhookPath,
+    webhookSecret: perAccount.webhookSecret ?? amiko.webhookSecret,
   };
 }
 

@@ -1,15 +1,16 @@
 import { amikoPlugin } from "./src/channel.js";
-import { setAmikoRuntime } from "./src/runtime.js";
+import { setAmikoRuntime, setAmikoRegisterHttpRoute } from "./src/runtime.js";
 
 export default {
   id: "amiko",
   name: "Amiko",
-  description: "Connect OpenClaw bot to Amiko platform (direct and group chat via polling API)",
+  description: "Connect OpenClaw bot to Amiko platform (direct and group chat via webhook)",
 
   configSchema: {},
 
-  register(api: { runtime: any; registerChannel: (params: { plugin: any }) => void }) {
+  register(api: { runtime: any; registerChannel: (params: { plugin: any }) => void; registerHttpRoute: (opts: any) => void }) {
     setAmikoRuntime(api.runtime);
+    setAmikoRegisterHttpRoute(api.registerHttpRoute.bind(api));
     api.registerChannel({ plugin: amikoPlugin });
   },
 };

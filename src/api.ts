@@ -1,6 +1,4 @@
 import type {
-  AmikoEventsResponse,
-  AmikoAckPayload,
   AmikoOutboundPayload,
   AmikoOutboundResponse,
 } from "./types.js";
@@ -54,30 +52,6 @@ async function apiRequest<T>(
   } finally {
     clearTimeout(timeoutId);
   }
-}
-
-export async function fetchAmikoEvents(
-  options: AmikoApiOptions,
-  params: { accountId: string; cursor?: string; limit?: number },
-): Promise<AmikoEventsResponse> {
-  const url = new URL(`${options.apiBaseUrl}/internal/openclaw/amiko/events`);
-  url.searchParams.set("accountId", params.accountId);
-  if (params.cursor) url.searchParams.set("cursor", params.cursor);
-  if (params.limit != null) url.searchParams.set("limit", String(params.limit));
-
-  return apiRequest<AmikoEventsResponse>("GET", url.toString(), options);
-}
-
-export async function ackAmikoEvents(
-  options: AmikoApiOptions,
-  payload: AmikoAckPayload,
-): Promise<void> {
-  await apiRequest<void>(
-    "POST",
-    `${options.apiBaseUrl}/internal/openclaw/amiko/acks`,
-    options,
-    payload,
-  );
 }
 
 export async function sendAmikoOutbound(

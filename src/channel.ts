@@ -7,6 +7,7 @@ import {
 } from "./accounts.js";
 import { sendTextAmiko, sendMediaAmiko } from "./send.js";
 import { probeAmikoAccount, buildAmikoAccountSnapshot, inspectAmikoAccount } from "./status.js";
+import { getAmikoRegisterHttpRoute } from "./runtime.js";
 
 // buildChannelConfigSchema is a no-op wrapper in this standalone plugin;
 // the real implementation is provided by the OpenClaw SDK at runtime.
@@ -20,9 +21,9 @@ export const amikoPlugin = {
   meta: {
     id: "amiko",
     label: "Amiko",
-    selectionLabel: "Amiko (Polling API)",
+    selectionLabel: "Amiko (Webhook)",
     docsPath: "/channels/amiko",
-    blurb: "Connect OpenClaw to Amiko platform for direct and group chat via polling.",
+    blurb: "Connect OpenClaw to Amiko platform for direct and group chat via webhook.",
     order: 90,
   },
 
@@ -119,7 +120,6 @@ export const amikoPlugin = {
       abortSignal: AbortSignal;
       setStatus: (patch: any) => void;
     }) {
-      // Dynamic import to avoid mixing static/lazy imports
       const { monitorAmikoProvider } = await import("./monitor.js");
       return monitorAmikoProvider({
         account: ctx.account,
@@ -127,6 +127,7 @@ export const amikoPlugin = {
         runtime: ctx.runtime,
         abortSignal: ctx.abortSignal,
         statusSink: (patch) => ctx.setStatus({ accountId: ctx.accountId, ...patch }),
+        registerHttpRoute: getAmikoRegisterHttpRoute(),
       });
     },
   },

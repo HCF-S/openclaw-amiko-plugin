@@ -9,8 +9,8 @@ const amikoAccountSchema = z.object({
   allowFrom: z.array(z.string()).optional(),
   groupPolicy: z.enum(["disabled", "allowlist", "open"]).optional(),
   groupAllowFrom: z.array(z.string()).optional(),
-  pollIntervalMs: z.number().int().min(1000).max(60000).optional(),
-  pollTimeoutMs: z.number().int().min(1000).max(30000).optional(),
+  webhookPath: z.string().optional(),
+  webhookSecret: z.string().optional(),
 });
 
 export const AmikoConfigSchema = amikoAccountSchema.extend({
