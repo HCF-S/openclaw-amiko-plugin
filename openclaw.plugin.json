@@ -1,1 +1,50 @@
-{}
+{
+  "id": "amiko",
+  "name": "Amiko",
+  "description": "OpenClaw channel plugin for Amiko platform — direct and group chat via polling API.",
+  "version": "0.1.0",
+  "channels": ["amiko"],
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  },
+  "uiHints": {
+    "token": {
+      "label": "API Token",
+      "sensitive": true,
+      "placeholder": "amk_live_..."
+    },
+    "apiBaseUrl": {
+      "label": "API Base URL",
+      "placeholder": "https://api.amiko.app"
+    },
+    "name": {
+      "label": "Account Name",
+      "placeholder": "Production Account"
+    },
+    "enabled": {
+      "label": "Enabled"
+    },
+    "dmPolicy": {
+      "label": "Direct Message Policy"
+    },
+    "allowFrom": {
+      "label": "DM Allowlist (user IDs)"
+    },
+    "groupPolicy": {
+      "label": "Group Chat Policy"
+    },
+    "groupAllowFrom": {
+      "label": "Group Allowlist (user IDs)"
+    },
+    "pollIntervalMs": {
+      "label": "Poll Interval (ms)",
+      "placeholder": "3000"
+    },
+    "pollTimeoutMs": {
+      "label": "Poll Timeout (ms)",
+      "placeholder": "10000"
+    }
+  }
+}
