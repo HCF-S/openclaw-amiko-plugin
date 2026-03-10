@@ -26,10 +26,11 @@
     "zod": "^3.22.4"
   },
   "openclaw": {
+    "extensions": ["./index.ts"],
     "channel": {
       "id": "amiko",
       "label": "Amiko",
-      "selectionLabel": "Amiko (Polling API)",
+      "selectionLabel": "Amiko (Webhook)",
       "blurb": "Connect OpenClaw to Amiko platform (direct and group chat)"
     },
     "install": {
