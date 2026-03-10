@@ -7,7 +7,7 @@ import {
 } from "./accounts.js";
 import { sendTextAmiko, sendMediaAmiko } from "./send.js";
 import { probeAmikoAccount, buildAmikoAccountSnapshot, inspectAmikoAccount } from "./status.js";
-import { getAmikoRegisterHttpRoute } from "./runtime.js";
+import { getAmikoRegisterHttpRoute, getAmikoRuntime } from "./runtime.js";
 
 // buildChannelConfigSchema is a no-op wrapper in this standalone plugin;
 // the real implementation is provided by the OpenClaw SDK at runtime.
@@ -93,7 +93,10 @@ export const amikoPlugin = {
     chunkerMode: "markdown" as const,
 
     async sendText({ to, text, account }: { to: string; text: string; account: ResolvedAmikoAccount; cfg: unknown; accountId: string }) {
-      return sendTextAmiko(to, text, account);
+      console.log(`[amiko:outbound] sendText to=${to} textLen=${text?.length}`);
+      const result = await sendTextAmiko(to, text, account);
+      console.log(`[amiko:outbound] sendText result:`, result);
+      return result;
     },
 
     async sendMedia({ to, text, mediaUrl, account }: { to: string; text: string; mediaUrl: string; cfg: unknown; accountId: string; account: ResolvedAmikoAccount }) {
@@ -124,7 +127,7 @@ export const amikoPlugin = {
       return monitorAmikoProvider({
         account: ctx.account,
         config: ctx.cfg,
-        runtime: ctx.runtime,
+        runtime: getAmikoRuntime(),
         abortSignal: ctx.abortSignal,
         statusSink: (patch) => ctx.setStatus({ accountId: ctx.accountId, ...patch }),
         registerHttpRoute: getAmikoRegisterHttpRoute(),

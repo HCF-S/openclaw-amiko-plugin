@@ -4,6 +4,7 @@ import type { PluginRuntime, RegisterHttpRouteFn } from "./runtime.js";
 import type { ProbeResult } from "./status.js";
 import { evaluateAmikoGroupAccess } from "./group-access.js";
 import { sendTextAmiko } from "./send.js";
+import { createReplyPrefixOptions } from "./reply-prefix.js";
 
 export type MonitorOptions = {
   account: ResolvedAmikoAccount;
@@ -32,7 +33,9 @@ async function processEvent(
   event: AmikoInboundEvent,
   options: Pick<MonitorOptions, "account" | "config" | "runtime">,
 ): Promise<void> {
-  const { account, runtime, config } = options;
+  const { account, runtime: core, config } = options;
+
+  console.log(`[amiko:${account.accountId}] processEvent: type=${event.type} convId=${event.conversationId} senderId=${event.senderId}`);
 
   const isGroup = event.conversationType === "group";
   const conversationId = event.conversationId;
@@ -47,64 +50,109 @@ async function processEvent(
       requireMention: true,
       mentionFound: event.mentionsBot ?? false,
     });
-
-    if (!groupAccess.allowed) {
-      // Silent drop — not an error
-      return;
-    }
+    if (!groupAccess.allowed) return;
   } else {
-    // DM authorization gate
     const dmPolicy = account.config.dmPolicy ?? "allowlist";
     if (dmPolicy === "disabled") return;
-
     if (dmPolicy === "allowlist") {
       const allowFrom = account.config.allowFrom ?? [];
-      const allowed = allowFrom.some((id) => id.trim() === event.senderId.trim());
-      if (!allowed) return;
+      if (!allowFrom.some((id) => id.trim() === event.senderId.trim())) return;
     }
-    // dmPolicy === "open" → allow all
   }
 
-  // Only process text and image events with content
-  if (event.type === "participant.added") return;
   if (event.type !== "message.text" && event.type !== "message.image") return;
 
   const peer = { kind: event.conversationType as "direct" | "group", id: conversationId };
-  const sessionKey = `amiko:${account.accountId}:${peer.kind}:${conversationId}`;
 
-  // Build context and dispatch reply
-  const ctxPayload = runtime.channel.reply.finalizeInboundContext({
+  // Resolve agent route (determines sessionKey + agentId, same as Zalo/Telegram plugins)
+  const route = core.channel.routing.resolveAgentRoute({
+    cfg: config,
     channel: "amiko",
     accountId: account.accountId,
-    sessionKey,
     peer,
-    cfg: config,
-    from: event.senderName,
-    timestamp: event.timestamp,
-    body: event.text ?? "",
-    attachments: event.mediaUrl
-      ? [{ type: "image", url: event.mediaUrl, caption: event.mediaCaption }]
-      : [],
   });
 
-  await runtime.channel.session.recordInboundSession({
-    storePath: `amiko/${account.accountId}/${peer.kind}/${conversationId}`,
-    sessionKey,
+  const storePath = core.channel.session.resolveStorePath(
+    (config as any).session?.store,
+    { agentId: route.agentId },
+  );
+
+  const rawBody = event.text?.trim() ?? "";
+  const fromLabel = isGroup ? `group:${conversationId}` : (event.senderName || `user:${event.senderId}`);
+  const previousTimestamp = core.channel.session.readSessionUpdatedAt({
+    storePath,
+    sessionKey: route.sessionKey,
+  });
+  const body = core.channel.reply.formatAgentEnvelope({
+    channel: "Amiko",
+    from: fromLabel,
+    timestamp: event.timestamp,
+    previousTimestamp,
+    envelope: core.channel.reply.resolveEnvelopeFormatOptions(config),
+    body: rawBody,
+  });
+
+  const ctxPayload = core.channel.reply.finalizeInboundContext({
+    Body: body,
+    BodyForAgent: rawBody,
+    RawBody: rawBody,
+    CommandBody: rawBody,
+    From: isGroup ? `amiko:group:${conversationId}` : `amiko:${event.senderId}`,
+    To: `amiko:${conversationId}`,
+    SessionKey: route.sessionKey,
+    AccountId: route.accountId,
+    ChatType: isGroup ? "group" : "direct",
+    ConversationLabel: fromLabel,
+    SenderName: event.senderName || undefined,
+    SenderId: event.senderId,
+    Provider: "amiko",
+    Surface: "amiko",
+    MessageSid: event.id,
+    OriginatingChannel: "amiko",
+    OriginatingTo: `amiko:${conversationId}`,
+  });
+
+  await core.channel.session.recordInboundSession({
+    storePath,
+    sessionKey: ctxPayload.SessionKey ?? route.sessionKey,
     ctx: ctxPayload,
     onRecordError: (err: unknown) => {
       console.error(`[amiko:${account.accountId}] recordInboundSession error:`, err);
     },
   });
 
-  await runtime.channel.reply.dispatchReplyWithBufferedBlockDispatcher({
+  const { onModelSelected, ...prefixOptions } = createReplyPrefixOptions({
+    cfg: config,
+    agentId: route.agentId,
+    channel: "amiko",
+    accountId: account.accountId,
+  });
+
+  console.log(`[amiko:${account.accountId}] dispatching reply: sessionKey=${route.sessionKey} agentId=${route.agentId}`);
+
+  await core.channel.reply.dispatchReplyWithBufferedBlockDispatcher({
     ctx: ctxPayload,
     cfg: config,
     dispatcherOptions: {
-      deliver: async (payload: { type: string; text?: string; mediaUrl?: string; caption?: string }) => {
-        if (payload.type === "text" && payload.text) {
-          await sendTextAmiko(conversationId, payload.text, account);
+      ...prefixOptions,
+      deliver: async (payload: { text?: string; mediaUrl?: string }) => {
+        console.log(`[amiko:${account.accountId}] deliver called: text=${!!payload.text} mediaUrl=${!!payload.mediaUrl}`);
+        if (payload.text) {
+          console.log(`[amiko:${account.accountId}] delivering reply to ${conversationId}: ${payload.text.slice(0, 100)}`);
+          const result = await sendTextAmiko(conversationId, payload.text, account);
+          if (!result.ok) {
+            console.error(`[amiko:${account.accountId}] sendTextAmiko failed:`, result);
+          } else {
+            console.log(`[amiko:${account.accountId}] reply delivered ok: messageId=${result.messageId}`);
+          }
         }
       },
+      onError: (err: unknown, info: { kind: string }) => {
+        console.error(`[amiko:${account.accountId}] ${info.kind} reply error:`, err);
+      },
+    },
+    replyOptions: {
+      onModelSelected,
     },
   });
 }

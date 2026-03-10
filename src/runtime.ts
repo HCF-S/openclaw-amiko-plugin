@@ -1,20 +1,36 @@
-export type ChannelRuntimeApi = {
-  reply: {
-    finalizeInboundContext(params: unknown): unknown;
-    dispatchReplyWithBufferedBlockDispatcher(params: unknown): Promise<void>;
-  };
-  session: {
-    recordInboundSession(params: {
-      storePath: string;
-      sessionKey: string;
-      ctx: unknown;
-      onRecordError: (err: unknown) => void;
-    }): Promise<void>;
-  };
+export type AgentRoute = {
+  agentId: string;
+  accountId: string;
+  sessionKey: string;
 };
 
 export type PluginRuntime = {
-  channel: ChannelRuntimeApi;
+  channel: {
+    reply: {
+      finalizeInboundContext(params: unknown): any;
+      dispatchReplyWithBufferedBlockDispatcher(params: unknown): Promise<void>;
+      formatAgentEnvelope(params: unknown): string;
+      resolveEnvelopeFormatOptions(cfg: unknown): unknown;
+    };
+    session: {
+      recordInboundSession(params: {
+        storePath: string;
+        sessionKey: string;
+        ctx: unknown;
+        onRecordError: (err: unknown) => void;
+      }): Promise<void>;
+      resolveStorePath(store: unknown, params: { agentId: string }): string;
+      readSessionUpdatedAt(params: { storePath: string; sessionKey: string }): number | undefined;
+    };
+    routing: {
+      resolveAgentRoute(params: {
+        cfg: unknown;
+        channel: string;
+        accountId: string;
+        peer: { kind: "direct" | "group"; id: string };
+      }): AgentRoute;
+    };
+  };
 };
 
 export type HttpRouteOptions = {

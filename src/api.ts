@@ -58,10 +58,9 @@ export async function sendAmikoOutbound(
   options: AmikoApiOptions,
   payload: AmikoOutboundPayload,
 ): Promise<AmikoOutboundResponse> {
-  return apiRequest<AmikoOutboundResponse>(
-    "POST",
-    `${options.apiBaseUrl}/internal/openclaw/amiko/messages`,
-    options,
-    payload,
-  );
+  const url = `${options.apiBaseUrl}/api/internal/openclaw/amiko/messages`;
+  console.log(`[amiko:api] sendAmikoOutbound POST ${url} conversationId=${payload.conversationId}`);
+  const result = await apiRequest<AmikoOutboundResponse>("POST", url, options, payload);
+  console.log(`[amiko:api] sendAmikoOutbound response:`, result);
+  return result;
 }
