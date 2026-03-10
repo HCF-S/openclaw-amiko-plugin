@@ -15,7 +15,7 @@
       "type": "string",
       "format": "uri",
       "description": "Base URL of amiko-platform internal API.",
-      "default": "https://api.amiko.app"
+      "default": "https://platform.heyamiko.com/api"
     },
     "name": {
       "type": "string",

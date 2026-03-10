@@ -17,7 +17,7 @@
     },
     "apiBaseUrl": {
       "label": "API Base URL",
-      "placeholder": "https://api.amiko.app"
+      "placeholder": "https://platform.heyamiko.com/api"
     },
     "name": {
       "label": "Account Name",
