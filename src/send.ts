@@ -10,7 +10,7 @@ export async function sendTextAmiko(
   const idempotencyKey = `${account.accountId}:${conversationId}:${randomUUID()}`;
   try {
     const res = await sendAmikoOutbound(
-      { apiBaseUrl: account.apiBaseUrl, token: account.token, timeoutMs: undefined },
+      { apiBaseUrl: account.apiBaseUrl, token: account.token, timeoutMs: 30_000 },
       { accountId: account.accountId, conversationId, idempotencyKey, type: "text", text },
     );
     if (!res.ok) {
@@ -35,7 +35,7 @@ export async function sendMediaAmiko(
   const idempotencyKey = `${account.accountId}:${conversationId}:${randomUUID()}`;
   try {
     const res = await sendAmikoOutbound(
-      { apiBaseUrl: account.apiBaseUrl, token: account.token, timeoutMs: undefined },
+      { apiBaseUrl: account.apiBaseUrl, token: account.token, timeoutMs: 30_000 },
       { accountId: account.accountId, conversationId, idempotencyKey, type: "media", text, mediaUrl, mediaCaption },
     );
     if (!res.ok) {
