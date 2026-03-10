@@ -1,5 +1,5 @@
 {
-  "name": "openclaw-amiko-plugin",
+  "name": "@openclaw/amiko",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -34,7 +34,7 @@
       "blurb": "Connect OpenClaw to Amiko platform (direct and group chat)"
     },
     "install": {
-      "npmSpec": "openclaw-amiko-plugin",
+      "npmSpec": "@openclaw/amiko",
       "localPath": "."
     }
   }
