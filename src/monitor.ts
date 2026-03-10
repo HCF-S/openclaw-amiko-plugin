@@ -115,7 +115,7 @@ export async function monitorAmikoProvider(options: MonitorOptions): Promise<Mon
 
   registerHttpRoute({
     path: webhookPath,
-    auth: "plugin",
+    auth: "gateway",
     match: "exact",
     replaceExisting: true,
     handler: async (req, res) => {

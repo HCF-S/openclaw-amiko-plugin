@@ -69,44 +69,74 @@ openclaw plugins install ~/openclaw-amiko-plugin/
 
 OpenClaw will copy the plugin to `~/.openclaw/extensions/amiko/` and register it in its config.
 
-### 5. Configure the channel
+### 5. Obtain your Amiko bot token
+
+The `token` is a **Bearer token** issued by the Amiko platform for your bot. It is used to authenticate every API call this plugin makes to `https://platform.heyamiko.com/api`.
+
+To get a token:
+1. Log in to the Amiko platform and open your bot settings.
+2. Generate or copy the API token for the bot you want to connect.
+3. Keep the token secret — treat it like a password.
+
+> **Error: `Amiko account "default" has no token configured`**
+> This means the `token` field is missing or empty in your `channels.amiko` config.
+> The channel health status will show `unconfigured` until a valid token is set.
+
+### 6. Configure the channel
 
 Add the following to your OpenClaw config (e.g. `~/.openclaw/channels.yaml`):
 
 ```yaml
 amiko:
-  token: YOUR_AMIKO_BOT_TOKEN
-  # Optional: restrict who can DM the bot (default: allowlist)
-  dmPolicy: allowlist
-  allowFrom:
+  token: YOUR_AMIKO_BOT_TOKEN        # required — Bearer token from Amiko platform
+  dmPolicy: allowlist                # allowlist | open | disabled (default: allowlist)
+  allowFrom:                         # sender IDs allowed to DM (when dmPolicy=allowlist)
     - user-id-1
     - user-id-2
-  # Optional: group chat policy (default: disabled)
-  groupPolicy: open
-  # Optional: custom webhook path and secret
-  webhookPath: /webhooks/amiko
-  webhookSecret: YOUR_WEBHOOK_SECRET
+  groupPolicy: disabled              # disabled | allowlist | open (default: disabled)
+  groupAllowFrom: []                 # group sender IDs (when groupPolicy=allowlist)
+  webhookPath: /amiko/webhook/default  # inbound webhook path (default shown)
+  webhookSecret: YOUR_WEBHOOK_SECRET   # optional HMAC secret for webhook validation
+  apiBaseUrl: https://platform.heyamiko.com/api  # optional, this is the default
 ```
 
-For multiple accounts:
+For multiple Amiko accounts:
 
 ```yaml
 amiko:
+  defaultAccount: main
   accounts:
     main:
       token: TOKEN_FOR_MAIN
+      dmPolicy: allowlist
+      allowFrom:
+        - user-id-1
     secondary:
       token: TOKEN_FOR_SECONDARY
-  defaultAccount: main
+      dmPolicy: open
 ```
 
-### 6. Restart the gateway
+Each account gets its own webhook endpoint at `/amiko/webhook/<accountId>`.
+
+### 7. Restart the gateway
 
 ```bash
 openclaw gateway restart
 ```
 
 The Amiko channel will be loaded and the webhook endpoint will be active.
+
+### Verify channel health
+
+After restarting, check that the channel is healthy:
+
+```bash
+openclaw channel status amiko
+```
+
+- `healthy` — token is valid and the Amiko API is reachable
+- `unconfigured` — `token` is missing from config (set it and restart)
+- `unhealthy` — token is set but the API returned an error (check token validity)
 
 ## Development
 
