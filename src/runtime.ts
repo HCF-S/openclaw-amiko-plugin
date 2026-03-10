@@ -8,14 +8,13 @@ export type ChannelRuntimeApi = {
       storePath: string;
       sessionKey: string;
       ctx: unknown;
+      onRecordError: (err: unknown) => void;
     }): Promise<void>;
   };
 };
 
 export type PluginRuntime = {
-  core: {
-    channel: ChannelRuntimeApi;
-  };
+  channel: ChannelRuntimeApi;
 };
 
 export type HttpRouteOptions = {

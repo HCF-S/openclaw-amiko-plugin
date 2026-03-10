@@ -33,7 +33,6 @@ async function processEvent(
   options: Pick<MonitorOptions, "account" | "config" | "runtime">,
 ): Promise<void> {
   const { account, runtime, config } = options;
-  const core = runtime.core;
 
   const isGroup = event.conversationType === "group";
   const conversationId = event.conversationId;
@@ -74,7 +73,7 @@ async function processEvent(
   const sessionKey = `amiko:${account.accountId}:${peer.kind}:${conversationId}`;
 
   // Build context and dispatch reply
-  const ctxPayload = core.channel.reply.finalizeInboundContext({
+  const ctxPayload = runtime.channel.reply.finalizeInboundContext({
     channel: "amiko",
     accountId: account.accountId,
     sessionKey,
@@ -88,13 +87,16 @@ async function processEvent(
       : [],
   });
 
-  await core.channel.session.recordInboundSession({
+  await runtime.channel.session.recordInboundSession({
     storePath: `amiko/${account.accountId}/${peer.kind}/${conversationId}`,
     sessionKey,
     ctx: ctxPayload,
+    onRecordError: (err: unknown) => {
+      console.error(`[amiko:${account.accountId}] recordInboundSession error:`, err);
+    },
   });
 
-  await core.channel.reply.dispatchReplyWithBufferedBlockDispatcher({
+  await runtime.channel.reply.dispatchReplyWithBufferedBlockDispatcher({
     ctx: ctxPayload,
     cfg: config,
     dispatcherOptions: {
@@ -118,37 +120,49 @@ export async function monitorAmikoProvider(options: MonitorOptions): Promise<Mon
     auth: "gateway",
     match: "exact",
     replaceExisting: true,
-    handler: async (req, res) => {
+    handler: async (req: any, res: any) => {
+      // Read raw body from Node.js IncomingMessage stream
+      const rawBody: Buffer = await new Promise((resolve, reject) => {
+        const chunks: Buffer[] = [];
+        req.on("data", (chunk: Buffer) => chunks.push(chunk));
+        req.on("end", () => resolve(Buffer.concat(chunks)));
+        req.on("error", reject);
+      });
+
+      const sendJson = (statusCode: number, body: unknown) => {
+        const json = JSON.stringify(body);
+        res.statusCode = statusCode;
+        res.setHeader("Content-Type", "application/json");
+        res.setHeader("Content-Length", Buffer.byteLength(json));
+        res.end(json);
+      };
+
       // Verify HMAC signature when a secret is configured
       if (webhookSecret) {
         const sig = req.headers["x-amiko-signature"] as string | undefined;
-        if (!sig) {
-          res.status(401).json({ error: "missing signature" });
-          return true;
-        }
-        const rawBody: Buffer | string = req.body ?? "";
+        if (!sig) { sendJson(401, { error: "missing signature" }); return true; }
         if (!verifyHmacSignature(webhookSecret, rawBody, sig)) {
-          res.status(401).json({ error: "invalid signature" });
+          sendJson(401, { error: "invalid signature" });
           return true;
         }
       }
 
       let payload: AmikoWebhookPayload;
       try {
-        payload = req.json() as AmikoWebhookPayload;
+        payload = JSON.parse(rawBody.toString("utf8")) as AmikoWebhookPayload;
       } catch {
-        res.status(400).json({ error: "invalid JSON" });
+        sendJson(400, { error: "invalid JSON" });
         return true;
       }
 
       const event = payload?.event;
       if (!event?.id || !event?.type) {
-        res.status(400).json({ error: "missing event" });
+        sendJson(400, { error: "missing event" });
         return true;
       }
 
       // Respond 200 immediately (ack), then process asynchronously
-      res.status(200).json({ ok: true });
+      sendJson(200, { ok: true });
 
       try {
         await processEvent(event, options);
