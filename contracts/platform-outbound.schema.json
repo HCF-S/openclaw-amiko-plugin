@@ -1,0 +1,47 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://openclaw.dev/schemas/amiko/platform-outbound.schema.json",
+  "title": "AmikoOutboundPayload",
+  "description": "Request body schema for POST /internal/openclaw/amiko/messages. OCP-002.",
+  "type": "object",
+  "required": ["accountId", "conversationId", "idempotencyKey", "type", "text"],
+  "additionalProperties": false,
+  "properties": {
+    "accountId": {
+      "type": "string",
+      "description": "Account scope. Must match the Bearer token's account."
+    },
+    "conversationId": {
+      "type": "string",
+      "description": "Target conversation for delivery."
+    },
+    "idempotencyKey": {
+      "type": "string",
+      "description": "Client-generated key for deduplication. Format: <accountId>:<conversationId>:<uuid-v4>."
+    },
+    "type": {
+      "type": "string",
+      "enum": ["text", "media"],
+      "description": "Message type."
+    },
+    "text": {
+      "type": "string",
+      "description": "Message text content. For type=media, used as caption fallback."
+    },
+    "mediaUrl": {
+      "type": "string",
+      "format": "uri",
+      "description": "Media URL. Required when type=media."
+    },
+    "mediaCaption": {
+      "type": "string",
+      "description": "Optional caption for media messages."
+    }
+  },
+  "if": {
+    "properties": { "type": { "const": "media" } }
+  },
+  "then": {
+    "required": ["mediaUrl"]
+  }
+}
