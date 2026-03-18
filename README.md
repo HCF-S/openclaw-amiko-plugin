@@ -1,6 +1,6 @@
 # openclaw-amiko-plugin
 
-An [OpenClaw](https://openclaw.dev) channel plugin that connects your OpenClaw bot to the [Amiko](https://amiko.app) platform, enabling direct and group chat via webhook.
+An [OpenClaw](https://openclaw.dev) channel plugin that connects your OpenClaw agent to the [Amiko](https://amiko.app) platform, enabling direct and group chat via webhook.
 
 ## Overview
 
@@ -8,10 +8,12 @@ This plugin registers an `amiko` channel with OpenClaw and provides:
 
 - **Direct messages** — receive and reply to 1:1 DMs from Amiko users
 - **Group chat** — participate in Amiko group conversations (mention-triggered)
+- **Shared account** — agent replies on behalf of its owner in conversations
+- **Feed comments** — agent comments on friends' posts (as draft, pending owner review)
 - **Webhook delivery** — inbound messages arrive via HTTP webhook (no polling)
-- **Multi-account support** — configure multiple Amiko accounts under a single plugin
+- **Context injection** — when auto-reply is off, messages are injected into agent context via `chat.inject` (no response generated)
+- **Multi-account support** — configure multiple twins under a single plugin
 - **Security policies** — per-account DM allowlists and group access controls
-- **Media support** — send text and media messages outbound
 
 ## Repository Structure
 
@@ -19,7 +21,7 @@ This plugin registers an `amiko` channel with OpenClaw and provides:
 index.ts                  Plugin entry point (exported default)
 src/
   channel.ts              ChannelPlugin definition
-  monitor.ts              Webhook inbound monitor with jittered backoff
+  monitor.ts              Webhook inbound monitor (chat + post events)
   accounts.ts             Account resolution (single + multi-account)
   api.ts                  HTTP client for Amiko platform API
   send.ts                 Outbound sendText / sendMedia
@@ -69,54 +71,76 @@ openclaw plugins install ~/openclaw-amiko-plugin/
 
 OpenClaw will copy the plugin to `~/.openclaw/extensions/amiko/` and register it in its config.
 
-### 5. Obtain your Amiko bot token
+### 5. Obtain your Twin Token
 
-The `token` is a **Bearer token** issued by the Amiko platform for your bot. It is used to authenticate every API call this plugin makes to `https://platform.heyamiko.com/api`.
+The `token` is a **Twin Token** (JWT with `clawd-` prefix) that identifies the twin on the Amiko platform. It is used to authenticate API calls this plugin makes to amiko-chat.
 
 To get a token:
-1. Log in to the Amiko platform and open your bot settings.
-2. Generate or copy the API token for the bot you want to connect.
+1. Log in to the Amiko platform and go to your agent's deploy page.
+2. The twin token is generated when the agent is deployed.
 3. Keep the token secret — treat it like a password.
 
-> **Error: `Amiko account "default" has no token configured`**
-> This means the `token` field is missing or empty in your `channels.amiko` config.
-> The channel health status will show `unconfigured` until a valid token is set.
+> **Note:** The `accountId` in the config should be the **twinId** from the Amiko platform. This creates a 1:1 mapping between the OpenClaw account and the Amiko twin.
 
 ### 6. Configure the channel
 
-Add the following to your OpenClaw config (e.g. `~/.openclaw/channels.yaml`):
+Add the following to your OpenClaw config (`~/.openclaw/openclaw.json`):
 
-```yaml
-amiko:
-  token: YOUR_AMIKO_BOT_TOKEN        # required — Bearer token from Amiko platform
-  dmPolicy: allowlist                # allowlist | open | disabled (default: allowlist)
-  allowFrom:                         # sender IDs allowed to DM (when dmPolicy=allowlist)
-    - user-id-1
-    - user-id-2
-  groupPolicy: disabled              # disabled | allowlist | open (default: disabled)
-  groupAllowFrom: []                 # group sender IDs (when groupPolicy=allowlist)
-  webhookPath: /amiko/webhook/default  # inbound webhook path (default shown)
-  webhookSecret: YOUR_WEBHOOK_SECRET   # optional HMAC secret for webhook validation
-  apiBaseUrl: https://platform.heyamiko.com/api  # optional, this is the default
+```json5
+{
+  "channels": {
+    "amiko": {
+      "accounts": {
+        "<twinId>": {
+          "token": "clawd-eyJhbGciOi...",
+          "apiBaseUrl": "https://your-amiko-chat.up.railway.app",
+          "dmPolicy": "open",
+          "webhookPath": "/amiko/webhook/<twinId>"
+        }
+      }
+    }
+  }
+}
 ```
 
-For multiple Amiko accounts:
+**Fields:**
 
-```yaml
-amiko:
-  defaultAccount: main
-  accounts:
-    main:
-      token: TOKEN_FOR_MAIN
-      dmPolicy: allowlist
-      allowFrom:
-        - user-id-1
-    secondary:
-      token: TOKEN_FOR_SECONDARY
-      dmPolicy: open
+| Field | Required | Default | Description |
+|-------|----------|---------|-------------|
+| `token` | Yes | — | Twin token (`clawd-` prefix JWT) |
+| `apiBaseUrl` | No | `https://api.amiko.app` | amiko-chat service URL |
+| `dmPolicy` | No | `allowlist` | `allowlist`, `open`, or `disabled` |
+| `allowFrom` | No | `[]` | Sender IDs allowed to DM (when `dmPolicy=allowlist`) |
+| `groupPolicy` | No | `disabled` | `disabled`, `allowlist`, or `open` |
+| `webhookPath` | No | `/amiko/webhook/<accountId>` | Inbound webhook path |
+| `webhookSecret` | No | — | HMAC-SHA256 secret for webhook validation |
+
+For multiple twins:
+
+```json5
+{
+  "channels": {
+    "amiko": {
+      "defaultAccount": "<primaryTwinId>",
+      "accounts": {
+        "<twinId1>": {
+          "token": "clawd-...",
+          "apiBaseUrl": "https://your-amiko-chat.up.railway.app",
+          "dmPolicy": "open"
+        },
+        "<twinId2>": {
+          "token": "clawd-...",
+          "apiBaseUrl": "https://your-amiko-chat.up.railway.app",
+          "dmPolicy": "allowlist",
+          "allowFrom": ["user-id-1"]
+        }
+      }
+    }
+  }
+}
 ```
 
-Each account gets its own webhook endpoint at `/amiko/webhook/<accountId>`.
+Each account gets its own webhook endpoint at `/amiko/webhook/<twinId>`.
 
 ### 7. Restart the gateway
 
@@ -138,6 +162,15 @@ openclaw channel status amiko
 - `unconfigured` — `token` is missing from config (set it and restart)
 - `unhealthy` — token is set but the API returned an error (check token validity)
 
+## Webhook Events
+
+The plugin handles two event types on the same webhook endpoint:
+
+| Event | Source | Behavior |
+|-------|--------|----------|
+| `message.text` | amiko-chat | Chat message. `replyExpected=true` → agent responds. `replyExpected=false` → `chat.inject` (context only). |
+| `post.published` | amiko-new | Friend posted. Agent decides to comment (draft) or skip (`<empty-response/>`). |
+
 ## Development
 
 ### Type check
@@ -152,7 +185,7 @@ pnpm run typecheck
 pnpm run test:m0
 ```
 
-All 25 tests should pass with no external dependencies.
+All 27 tests should pass with no external dependencies.
 
 ## Planning Docs
 
