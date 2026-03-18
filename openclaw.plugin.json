@@ -15,9 +15,21 @@
       "sensitive": true,
       "placeholder": "amk_live_..."
     },
+    "twinId": {
+      "label": "Twin ID",
+      "placeholder": "cmmkxz9qh0005r7489lrqt4kg"
+    },
+    "platformApiBaseUrl": {
+      "label": "Platform API Base URL",
+      "placeholder": "https://platform.heyamiko.com"
+    },
+    "chatApiBaseUrl": {
+      "label": "Chat API Base URL",
+      "placeholder": "https://api.amiko.app"
+    },
     "apiBaseUrl": {
-      "label": "API Base URL",
-      "placeholder": "https://platform.heyamiko.com/api"
+      "label": "Legacy API Base URL",
+      "placeholder": "https://platform.heyamiko.com"
     },
     "name": {
       "label": "Account Name",
@@ -25,18 +37,6 @@
     },
     "enabled": {
       "label": "Enabled"
-    },
-    "dmPolicy": {
-      "label": "Direct Message Policy"
-    },
-    "allowFrom": {
-      "label": "DM Allowlist (user IDs)"
-    },
-    "groupPolicy": {
-      "label": "Group Chat Policy"
-    },
-    "groupAllowFrom": {
-      "label": "Group Allowlist (user IDs)"
     },
     "pollIntervalMs": {
       "label": "Poll Interval (ms)",

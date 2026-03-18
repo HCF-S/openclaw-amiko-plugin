@@ -1,12 +1,11 @@
 export type AmikoAccountConfig = {
   name?: string;
   enabled?: boolean;
+  twinId?: string;
   token?: string;
+  platformApiBaseUrl?: string;
+  chatApiBaseUrl?: string;
   apiBaseUrl?: string;
-  dmPolicy?: "allowlist" | "open" | "disabled";
-  allowFrom?: string[];
-  groupPolicy?: "disabled" | "allowlist" | "open";
-  groupAllowFrom?: string[];
   webhookPath?: string;
   webhookSecret?: string;
 };
@@ -18,10 +17,12 @@ export type AmikoConfig = {
 
 export type ResolvedAmikoAccount = {
   accountId: string;
+  twinId: string;
   name?: string;
   enabled: boolean;
   token: string;
-  apiBaseUrl: string;
+  platformApiBaseUrl: string;
+  chatApiBaseUrl: string;
   config: AmikoAccountConfig;
 };
 

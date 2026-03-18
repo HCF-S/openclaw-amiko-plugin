@@ -2,7 +2,6 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import type { ResolvedAmikoAccount, AmikoInboundEvent, AmikoWebhookPayload } from "./types.js";
 import type { PluginRuntime, RegisterHttpRouteFn } from "./runtime.js";
 import type { ProbeResult } from "./status.js";
-import { evaluateAmikoGroupAccess } from "./group-access.js";
 import { sendTextAmiko } from "./send.js";
 import { createReplyPrefixOptions } from "./reply-prefix.js";
 
@@ -45,26 +44,6 @@ async function processChatEvent(
 
   const isGroup = event.conversationType === "group";
   const conversationId = event.conversationId;
-
-  // Group access gate
-  if (isGroup) {
-    const groupAccess = evaluateAmikoGroupAccess({
-      senderId: event.senderId,
-      groupId: conversationId,
-      policy: account.config.groupPolicy ?? "disabled",
-      allowFrom: account.config.groupAllowFrom ?? [],
-      requireMention: true,
-      mentionFound: event.mentionsBot ?? false,
-    });
-    if (!groupAccess.allowed) return;
-  } else {
-    const dmPolicy = account.config.dmPolicy ?? "allowlist";
-    if (dmPolicy === "disabled") return;
-    if (dmPolicy === "allowlist") {
-      const allowFrom = account.config.allowFrom ?? [];
-      if (!allowFrom.some((id) => id.trim() === event.senderId.trim())) return;
-    }
-  }
 
   const peer = { kind: event.conversationType as "direct" | "group", id: conversationId };
 
@@ -279,7 +258,7 @@ async function processPostEvent(
         }
 
         // Post comment via amiko-new API
-        const commentUrl = `${account.apiBaseUrl}/api/posts/${postId}/comments`;
+        const commentUrl = `${account.platformApiBaseUrl}/api/posts/${postId}/comments`;
         console.log(
           `[amiko:${account.accountId}] posting comment on ${postId}: ${text.slice(0, 100)}`,
         );
@@ -341,7 +320,7 @@ async function processEvent(
 export async function monitorAmikoProvider(options: MonitorOptions): Promise<MonitorHandle> {
   const { account, statusSink, registerHttpRoute } = options;
   const webhookPath =
-    account.config.webhookPath ?? `/amiko/webhook/${account.accountId}`;
+    account.config.webhookPath ?? `/amiko/webhook/${account.twinId}`;
   const webhookSecret = account.config.webhookSecret;
 
   registerHttpRoute({

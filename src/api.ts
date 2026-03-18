@@ -4,7 +4,7 @@ import type {
 } from "./types.js";
 
 export type AmikoApiOptions = {
-  apiBaseUrl: string;
+  chatApiBaseUrl: string;
   token: string;
   timeoutMs?: number;
 };
@@ -58,7 +58,7 @@ export async function sendAmikoOutbound(
   options: AmikoApiOptions,
   payload: AmikoOutboundPayload,
 ): Promise<AmikoOutboundResponse> {
-  const url = `${options.apiBaseUrl}/api/internal/openclaw/amiko/messages`;
+  const url = `${options.chatApiBaseUrl}/api/internal/openclaw/amiko/messages`;
   console.log(`[amiko:api] sendAmikoOutbound POST ${url} conversationId=${payload.conversationId}`);
   const result = await apiRequest<AmikoOutboundResponse>("POST", url, options, payload);
   console.log(`[amiko:api] sendAmikoOutbound response:`, result);

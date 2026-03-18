@@ -70,12 +70,12 @@ export const amikoPlugin = {
   },
 
   security: {
-    resolveDmPolicy({ account }: { account: ResolvedAmikoAccount }) {
+    resolveDmPolicy(_params: { account: ResolvedAmikoAccount }) {
       return {
-        policy: (account.config.dmPolicy ?? "allowlist") as "allowlist" | "open" | "disabled",
-        allowFrom: account.config.allowFrom ?? [],
-        allowFromPath: "channels.amiko.allowFrom",
-        approveHint: "Add the sender's user ID to channels.amiko.allowFrom",
+        policy: "open" as const,
+        allowFrom: [],
+        allowFromPath: "channels.amiko.accounts",
+        approveHint: "DM and group access are controlled by Amiko conversations.",
         normalizeEntry: (e: string) => e.trim(),
       };
     },

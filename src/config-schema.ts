@@ -3,12 +3,11 @@ import { z } from "zod";
 const amikoAccountSchema = z.object({
   name: z.string().optional(),
   enabled: z.boolean().optional(),
+  twinId: z.string().optional(),
   token: z.string().optional(),
+  platformApiBaseUrl: z.string().url().optional(),
+  chatApiBaseUrl: z.string().url().optional(),
   apiBaseUrl: z.string().url().optional(),
-  dmPolicy: z.enum(["allowlist", "open", "disabled"]).optional(),
-  allowFrom: z.array(z.string()).optional(),
-  groupPolicy: z.enum(["disabled", "allowlist", "open"]).optional(),
-  groupAllowFrom: z.array(z.string()).optional(),
   webhookPath: z.string().optional(),
   webhookSecret: z.string().optional(),
 });

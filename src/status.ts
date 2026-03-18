@@ -9,12 +9,12 @@ export type ProbeResult = {
 
 export type AccountSnapshot = {
   accountId: string;
+  twinId: string;
   name?: string;
   enabled: boolean;
   configured: boolean;
-  apiBaseUrl: string;
-  dmPolicy: string;
-  groupPolicy: string;
+  platformApiBaseUrl: string;
+  chatApiBaseUrl: string;
 };
 
 export async function probeAmikoAccount(account: ResolvedAmikoAccount): Promise<ProbeResult> {
@@ -24,7 +24,7 @@ export async function probeAmikoAccount(account: ResolvedAmikoAccount): Promise<
 
   const start = Date.now();
   try {
-    const res = await fetch(`${account.apiBaseUrl}/internal/openclaw/amiko/health`, {
+    const res = await fetch(`${account.chatApiBaseUrl}/internal/openclaw/amiko/health`, {
       method: "GET",
       headers: {
         Authorization: `Bearer ${account.token}`,
@@ -48,27 +48,25 @@ export async function probeAmikoAccount(account: ResolvedAmikoAccount): Promise<
 export function buildAmikoAccountSnapshot(account: ResolvedAmikoAccount): AccountSnapshot {
   return {
     accountId: account.accountId,
+    twinId: account.twinId,
     name: account.name,
     enabled: account.enabled,
     configured: Boolean(account.token?.trim()),
-    apiBaseUrl: account.apiBaseUrl,
-    dmPolicy: account.config.dmPolicy ?? "allowlist",
-    groupPolicy: account.config.groupPolicy ?? "disabled",
+    platformApiBaseUrl: account.platformApiBaseUrl,
+    chatApiBaseUrl: account.chatApiBaseUrl,
   };
 }
 
 export function inspectAmikoAccount(account: ResolvedAmikoAccount): Record<string, unknown> {
   return {
     accountId: account.accountId,
+    twinId: account.twinId,
     name: account.name,
     enabled: account.enabled,
     hasToken: Boolean(account.token?.trim()),
-    apiBaseUrl: account.apiBaseUrl,
-    dmPolicy: account.config.dmPolicy ?? "allowlist",
-    allowFrom: account.config.allowFrom ?? [],
-    groupPolicy: account.config.groupPolicy ?? "disabled",
-    groupAllowFrom: account.config.groupAllowFrom ?? [],
-    webhookPath: account.config.webhookPath ?? `/amiko/webhook/${account.accountId}`,
+    platformApiBaseUrl: account.platformApiBaseUrl,
+    chatApiBaseUrl: account.chatApiBaseUrl,
+    webhookPath: account.config.webhookPath ?? `/amiko/webhook/${account.twinId}`,
     webhookSecret: account.config.webhookSecret ? "(configured)" : "(not set)",
   };
 }

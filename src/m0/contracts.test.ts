@@ -12,8 +12,9 @@ import assert from "node:assert/strict";
 // Inline implementations for M0 validation (no imports from src/*)
 // ---------------------------------------------------------------------------
 
-const DEFAULT_ACCOUNT_ID = "default";
-const DEFAULT_API_BASE_URL = "https://api.amiko.app";
+const DEFAULT_ACCOUNT_ID = "main";
+const DEFAULT_PLATFORM_API_BASE_URL = "https://platform.heyamiko.com";
+const DEFAULT_CHAT_API_BASE_URL = "https://api.amiko.app";
 
 function normalizeAccountId(id: string): string {
   return id.toLowerCase().trim();
@@ -22,12 +23,11 @@ function normalizeAccountId(id: string): string {
 type AmikoAccountConfig = {
   name?: string;
   enabled?: boolean;
+  twinId?: string;
   token?: string;
+  platformApiBaseUrl?: string;
+  chatApiBaseUrl?: string;
   apiBaseUrl?: string;
-  dmPolicy?: "allowlist" | "open" | "disabled";
-  allowFrom?: string[];
-  groupPolicy?: "disabled" | "allowlist" | "open";
-  groupAllowFrom?: string[];
   pollIntervalMs?: number;
   pollTimeoutMs?: number;
 };
@@ -39,10 +39,12 @@ type AmikoConfig = {
 
 type ResolvedAmikoAccount = {
   accountId: string;
+  twinId: string;
   name?: string;
   enabled: boolean;
   token: string;
-  apiBaseUrl: string;
+  platformApiBaseUrl: string;
+  chatApiBaseUrl: string;
   config: AmikoAccountConfig;
 };
 
@@ -59,6 +61,7 @@ function resolveDefaultAmikoAccountId(cfg: { channels?: { amiko?: AmikoConfig } 
   if (!amiko) return DEFAULT_ACCOUNT_ID;
   if (amiko.defaultAccount) return normalizeAccountId(amiko.defaultAccount);
   const ids = listAmikoAccountIds(cfg);
+  if (ids.includes(DEFAULT_ACCOUNT_ID)) return DEFAULT_ACCOUNT_ID;
   return ids[0] ?? DEFAULT_ACCOUNT_ID;
 }
 
@@ -67,12 +70,11 @@ function resolveAmikoAccountConfig(amiko: AmikoConfig, accountId: string): Amiko
     return {
       name: amiko.name,
       enabled: amiko.enabled,
+      twinId: amiko.twinId,
       token: amiko.token,
+      platformApiBaseUrl: amiko.platformApiBaseUrl ?? amiko.apiBaseUrl,
+      chatApiBaseUrl: amiko.chatApiBaseUrl ?? amiko.apiBaseUrl,
       apiBaseUrl: amiko.apiBaseUrl,
-      dmPolicy: amiko.dmPolicy,
-      allowFrom: amiko.allowFrom,
-      groupPolicy: amiko.groupPolicy,
-      groupAllowFrom: amiko.groupAllowFrom,
       pollIntervalMs: amiko.pollIntervalMs,
       pollTimeoutMs: amiko.pollTimeoutMs,
     };
@@ -81,12 +83,13 @@ function resolveAmikoAccountConfig(amiko: AmikoConfig, accountId: string): Amiko
   return {
     name: per.name ?? amiko.name,
     enabled: per.enabled ?? amiko.enabled,
+    twinId: per.twinId ?? amiko.twinId,
     token: per.token ?? amiko.token,
+    platformApiBaseUrl:
+      per.platformApiBaseUrl ?? per.apiBaseUrl ?? amiko.platformApiBaseUrl ?? amiko.apiBaseUrl,
+    chatApiBaseUrl:
+      per.chatApiBaseUrl ?? per.apiBaseUrl ?? amiko.chatApiBaseUrl ?? amiko.apiBaseUrl,
     apiBaseUrl: per.apiBaseUrl ?? amiko.apiBaseUrl,
-    dmPolicy: per.dmPolicy ?? amiko.dmPolicy,
-    allowFrom: per.allowFrom ?? amiko.allowFrom,
-    groupPolicy: per.groupPolicy ?? amiko.groupPolicy,
-    groupAllowFrom: per.groupAllowFrom ?? amiko.groupAllowFrom,
     pollIntervalMs: per.pollIntervalMs ?? amiko.pollIntervalMs,
     pollTimeoutMs: per.pollTimeoutMs ?? amiko.pollTimeoutMs,
   };
@@ -99,13 +102,22 @@ function resolveAmikoAccount(params: {
   const { cfg, accountId } = params;
   const amiko = cfg.channels?.amiko ?? ({} as AmikoConfig);
   const config = resolveAmikoAccountConfig(amiko, accountId);
+  if (!config.twinId?.trim()) throw new Error(`Amiko account "${accountId}" has no twinId`);
   if (!config.token?.trim()) throw new Error(`Amiko account "${accountId}" has no token`);
   return {
     accountId,
+    twinId: config.twinId,
     name: config.name,
     enabled: config.enabled !== false,
     token: config.token,
-    apiBaseUrl: config.apiBaseUrl ?? DEFAULT_API_BASE_URL,
+    platformApiBaseUrl:
+      (config.platformApiBaseUrl ?? config.apiBaseUrl ?? DEFAULT_PLATFORM_API_BASE_URL)
+        .replace(/\/+$/, "")
+        .replace(/\/api$/, ""),
+    chatApiBaseUrl:
+      (config.chatApiBaseUrl ?? config.apiBaseUrl ?? DEFAULT_CHAT_API_BASE_URL)
+        .replace(/\/+$/, "")
+        .replace(/\/api$/, ""),
     config,
   };
 }
@@ -116,24 +128,6 @@ function buildSessionKey(
   conversationId: string,
 ): string {
   return `amiko:${accountId}:${conversationType}:${conversationId}`;
-}
-
-type GroupAccessParams = {
-  senderId: string;
-  policy: "disabled" | "allowlist" | "open";
-  allowFrom: string[];
-  requireMention: boolean;
-  mentionFound: boolean;
-};
-
-function evaluateGroupAccess(p: GroupAccessParams): { allowed: boolean; reason: string } {
-  if (p.policy === "disabled") return { allowed: false, reason: "group_policy_disabled" };
-  if (p.requireMention && !p.mentionFound) return { allowed: false, reason: "mention_required" };
-  if (p.policy === "allowlist") {
-    const allowed = p.allowFrom.some((e) => e.trim() === p.senderId.trim());
-    return { allowed, reason: allowed ? "allowlist_match" : "sender_not_in_allowlist" };
-  }
-  return { allowed: true, reason: "open_policy" };
 }
 
 // ---------------------------------------------------------------------------
@@ -148,12 +142,17 @@ describe("OCP-001: Account resolution", () => {
   });
 
   it("resolves single-account config correctly", () => {
-    const cfg = { channels: { amiko: { token: "tok_abc", dmPolicy: "open" as const } } };
+    const cfg = {
+      channels: {
+        amiko: { twinId: "twin_main", token: "tok_abc" },
+      },
+    };
     const account = resolveAmikoAccount({ cfg, accountId: DEFAULT_ACCOUNT_ID });
     assert.equal(account.token, "tok_abc");
-    assert.equal(account.config.dmPolicy, "open");
+    assert.equal(account.twinId, "twin_main");
     assert.equal(account.enabled, true);
-    assert.equal(account.apiBaseUrl, DEFAULT_API_BASE_URL);
+    assert.equal(account.platformApiBaseUrl, DEFAULT_PLATFORM_API_BASE_URL);
+    assert.equal(account.chatApiBaseUrl, DEFAULT_CHAT_API_BASE_URL);
   });
 
   it("multi-account: lists sorted account IDs", () => {
@@ -172,12 +171,10 @@ describe("OCP-001: Account resolution", () => {
       channels: {
         amiko: {
           token: "base_tok",
-          dmPolicy: "allowlist" as const,
-          allowFrom: ["user_1"],
           accounts: {
             staging: {
+              twinId: "twin_staging",
               token: "staging_tok",
-              dmPolicy: "open" as const,
             },
           },
         },
@@ -185,9 +182,7 @@ describe("OCP-001: Account resolution", () => {
     };
     const account = resolveAmikoAccount({ cfg, accountId: "staging" });
     assert.equal(account.token, "staging_tok");
-    assert.equal(account.config.dmPolicy, "open");
-    // allowFrom falls back to base
-    assert.deepEqual(account.config.allowFrom, ["user_1"]);
+    assert.equal(account.twinId, "twin_staging");
   });
 
   it("multi-account: defaultAccount respected", () => {
@@ -195,7 +190,10 @@ describe("OCP-001: Account resolution", () => {
       channels: {
         amiko: {
           defaultAccount: "prod",
-          accounts: { prod: { token: "t1" }, alpha: { token: "t2" } },
+          accounts: {
+            prod: { twinId: "twin_prod", token: "t1" },
+            alpha: { twinId: "twin_alpha", token: "t2" },
+          },
         },
       },
     };
@@ -206,15 +204,34 @@ describe("OCP-001: Account resolution", () => {
     const cfg = {
       channels: {
         amiko: {
-          accounts: { prod: { token: "t1" }, alpha: { token: "t2" } },
+          accounts: {
+            prod: { twinId: "twin_prod", token: "t1" },
+            alpha: { twinId: "twin_alpha", token: "t2" },
+          },
         },
       },
     };
     assert.equal(resolveDefaultAmikoAccountId(cfg), "alpha");
   });
 
+  it("prefers main when defaultAccount is absent", () => {
+    const cfg = {
+      channels: {
+        amiko: {
+          accounts: {
+            "agent-foo": { twinId: "twin_foo", token: "t1" },
+            main: { twinId: "twin_main", token: "t2" },
+          },
+        },
+      },
+    };
+    assert.equal(resolveDefaultAmikoAccountId(cfg), "main");
+  });
+
   it("enabled: false account resolves but has enabled=false", () => {
-    const cfg = { channels: { amiko: { token: "tok", enabled: false } } };
+    const cfg = {
+      channels: { amiko: { twinId: "twin_main", token: "tok", enabled: false } },
+    };
     const account = resolveAmikoAccount({ cfg, accountId: DEFAULT_ACCOUNT_ID });
     assert.equal(account.enabled, false);
   });
@@ -223,7 +240,7 @@ describe("OCP-001: Account resolution", () => {
     const cfg = { channels: { amiko: {} } };
     assert.throws(
       () => resolveAmikoAccount({ cfg, accountId: DEFAULT_ACCOUNT_ID }),
-      /no token/,
+      /no twinId/,
     );
   });
 
@@ -264,96 +281,11 @@ describe("OCP-003: Session key convention", () => {
     assert.notEqual(k1, k2);
   });
 
-  it("default account key uses 'default'", () => {
+  it("default account key uses 'main'", () => {
     assert.equal(
       buildSessionKey(DEFAULT_ACCOUNT_ID, "direct", "conv_y"),
-      "amiko:default:direct:conv_y",
+      "amiko:main:direct:conv_y",
     );
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Security: DM and Group Policy tests
-// ---------------------------------------------------------------------------
-
-describe("DM policy enforcement", () => {
-  it("dmPolicy=disabled: no DMs allowed", () => {
-    // Simulated in monitor: dmPolicy === 'disabled' returns early
-    const policy = "disabled";
-    assert.equal(policy === "disabled", true);
-  });
-
-  it("dmPolicy=allowlist: only listed senders allowed", () => {
-    const allowFrom = ["user_alice", "user_bob"];
-    const isAllowed = (id: string) => allowFrom.some((e) => e === id);
-    assert.equal(isAllowed("user_alice"), true);
-    assert.equal(isAllowed("user_eve"), false);
-  });
-
-  it("dmPolicy=open: all senders allowed", () => {
-    const policy = "open";
-    assert.equal(policy === "open", true);
-  });
-});
-
-describe("Group access policy enforcement", () => {
-  it("policy=disabled blocks all", () => {
-    const r = evaluateGroupAccess({
-      senderId: "user_1",
-      policy: "disabled",
-      allowFrom: ["user_1"],
-      requireMention: true,
-      mentionFound: true,
-    });
-    assert.equal(r.allowed, false);
-    assert.equal(r.reason, "group_policy_disabled");
-  });
-
-  it("mention_required blocks non-mention even if allowlisted", () => {
-    const r = evaluateGroupAccess({
-      senderId: "user_1",
-      policy: "allowlist",
-      allowFrom: ["user_1"],
-      requireMention: true,
-      mentionFound: false,
-    });
-    assert.equal(r.allowed, false);
-    assert.equal(r.reason, "mention_required");
-  });
-
-  it("policy=allowlist allows listed sender with mention", () => {
-    const r = evaluateGroupAccess({
-      senderId: "user_1",
-      policy: "allowlist",
-      allowFrom: ["user_1"],
-      requireMention: true,
-      mentionFound: true,
-    });
-    assert.equal(r.allowed, true);
-  });
-
-  it("policy=allowlist blocks unlisted sender", () => {
-    const r = evaluateGroupAccess({
-      senderId: "user_eve",
-      policy: "allowlist",
-      allowFrom: ["user_1", "user_2"],
-      requireMention: true,
-      mentionFound: true,
-    });
-    assert.equal(r.allowed, false);
-    assert.equal(r.reason, "sender_not_in_allowlist");
-  });
-
-  it("policy=open allows any sender with mention", () => {
-    const r = evaluateGroupAccess({
-      senderId: "user_anyone",
-      policy: "open",
-      allowFrom: [],
-      requireMention: true,
-      mentionFound: true,
-    });
-    assert.equal(r.allowed, true);
-    assert.equal(r.reason, "open_policy");
   });
 });
 
@@ -425,9 +357,9 @@ describe("OCP-002: Event payload structure", () => {
     assert.equal("cursor" in payload.event, false);
   });
 
-  it("webhook default path format is /amiko/webhook/<accountId>", () => {
-    const accountId = "prod";
-    const defaultPath = `/amiko/webhook/${accountId}`;
-    assert.equal(defaultPath, "/amiko/webhook/prod");
+  it("webhook default path format is /amiko/webhook/<twinId>", () => {
+    const twinId = "twin_prod";
+    const defaultPath = `/amiko/webhook/${twinId}`;
+    assert.equal(defaultPath, "/amiko/webhook/twin_prod");
   });
 });

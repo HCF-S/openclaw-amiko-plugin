@@ -11,11 +11,26 @@
       "description": "Bearer token for amiko-platform API authentication. Sensitive.",
       "uiHints": { "sensitive": true }
     },
+    "twinId": {
+      "type": "string",
+      "description": "Amiko twin ID used by this account."
+    },
+    "platformApiBaseUrl": {
+      "type": "string",
+      "format": "uri",
+      "description": "Base URL of amiko-new / platform API.",
+      "default": "https://platform.heyamiko.com"
+    },
+    "chatApiBaseUrl": {
+      "type": "string",
+      "format": "uri",
+      "description": "Base URL of amiko-chat internal channel API.",
+      "default": "https://api.amiko.app"
+    },
     "apiBaseUrl": {
       "type": "string",
       "format": "uri",
-      "description": "Base URL of amiko-platform internal API.",
-      "default": "https://platform.heyamiko.com/api"
+      "description": "Legacy fallback URL. Prefer platformApiBaseUrl and chatApiBaseUrl."
     },
     "name": {
       "type": "string",
@@ -25,30 +40,6 @@
       "type": "boolean",
       "description": "Whether this account is active. Defaults to true.",
       "default": true
-    },
-    "dmPolicy": {
-      "type": "string",
-      "enum": ["allowlist", "open", "disabled"],
-      "description": "Direct message authorization policy.",
-      "default": "allowlist"
-    },
-    "allowFrom": {
-      "type": "array",
-      "items": { "type": "string" },
-      "description": "Sender IDs allowed to DM when dmPolicy=allowlist.",
-      "default": []
-    },
-    "groupPolicy": {
-      "type": "string",
-      "enum": ["disabled", "allowlist", "open"],
-      "description": "Group chat authorization policy.",
-      "default": "disabled"
-    },
-    "groupAllowFrom": {
-      "type": "array",
-      "items": { "type": "string" },
-      "description": "Sender IDs allowed in groups when groupPolicy=allowlist.",
-      "default": []
     },
     "pollIntervalMs": {
       "type": "integer",
@@ -66,11 +57,11 @@
     },
     "defaultAccount": {
       "type": "string",
-      "description": "Which account key to treat as default in multi-account mode."
+      "description": "Which OpenClaw agent/account key to treat as default in multi-account mode."
     },
     "accounts": {
       "type": "object",
-      "description": "Per-account config overrides keyed by accountId.",
+      "description": "Per-account config overrides keyed by OpenClaw agent ID (for example main, agent-foo).",
       "additionalProperties": {
         "$ref": "#/$defs/AmikoAccountConfig"
       }
@@ -82,13 +73,12 @@
       "additionalProperties": false,
       "properties": {
         "token": { "type": "string", "uiHints": { "sensitive": true } },
+        "twinId": { "type": "string" },
+        "platformApiBaseUrl": { "type": "string", "format": "uri" },
+        "chatApiBaseUrl": { "type": "string", "format": "uri" },
         "apiBaseUrl": { "type": "string", "format": "uri" },
         "name": { "type": "string" },
         "enabled": { "type": "boolean" },
-        "dmPolicy": { "type": "string", "enum": ["allowlist", "open", "disabled"] },
-        "allowFrom": { "type": "array", "items": { "type": "string" } },
-        "groupPolicy": { "type": "string", "enum": ["disabled", "allowlist", "open"] },
-        "groupAllowFrom": { "type": "array", "items": { "type": "string" } },
         "pollIntervalMs": { "type": "integer", "minimum": 1000, "maximum": 60000 },
         "pollTimeoutMs": { "type": "integer", "minimum": 1000, "maximum": 30000 }
       }

@@ -13,7 +13,7 @@ This plugin registers an `amiko` channel with OpenClaw and provides:
 - **Webhook delivery** — inbound messages arrive via HTTP webhook (no polling)
 - **Context injection** — when auto-reply is off, messages are injected into agent context via `chat.inject` (no response generated)
 - **Multi-account support** — configure multiple twins under a single plugin
-- **Security policies** — per-account DM allowlists and group access controls
+- **Conversation-scoped delivery** — Amiko decides which conversations are routed to the plugin
 
 ## Repository Structure
 
@@ -25,7 +25,6 @@ src/
   accounts.ts             Account resolution (single + multi-account)
   api.ts                  HTTP client for Amiko platform API
   send.ts                 Outbound sendText / sendMedia
-  group-access.ts         Group policy evaluation
   status.ts               Health probe + account inspection
   runtime.ts              PluginRuntime singleton
   config-schema.ts        Zod schema for channels.amiko config
@@ -80,7 +79,7 @@ To get a token:
 2. The twin token is generated when the agent is deployed.
 3. Keep the token secret — treat it like a password.
 
-> **Note:** The `accountId` in the config should be the **twinId** from the Amiko platform. This creates a 1:1 mapping between the OpenClaw account and the Amiko twin.
+> **Note:** The account key in `channels.amiko.accounts` should be the OpenClaw agent ID, such as `main` or `agent-foo`. Put the actual Amiko twin ID in `twinId`.
 
 ### 6. Configure the channel
 
@@ -90,12 +89,14 @@ Add the following to your OpenClaw config (`~/.openclaw/openclaw.json`):
 {
   "channels": {
     "amiko": {
+      "defaultAccount": "main",
       "accounts": {
-        "<twinId>": {
+        "main": {
+          "twinId": "<primaryTwinId>",
           "token": "clawd-eyJhbGciOi...",
-          "apiBaseUrl": "https://your-amiko-chat.up.railway.app",
-          "dmPolicy": "open",
-          "webhookPath": "/amiko/webhook/<twinId>"
+          "platformApiBaseUrl": "https://platform.heyamiko.com",
+          "chatApiBaseUrl": "https://your-amiko-chat.up.railway.app",
+          "webhookPath": "/amiko/webhook/<primaryTwinId>"
         }
       }
     }
@@ -107,12 +108,12 @@ Add the following to your OpenClaw config (`~/.openclaw/openclaw.json`):
 
 | Field | Required | Default | Description |
 |-------|----------|---------|-------------|
+| `twinId` | Yes | — | Amiko twin ID for this OpenClaw agent |
 | `token` | Yes | — | Twin token (`clawd-` prefix JWT) |
-| `apiBaseUrl` | No | `https://api.amiko.app` | amiko-chat service URL |
-| `dmPolicy` | No | `allowlist` | `allowlist`, `open`, or `disabled` |
-| `allowFrom` | No | `[]` | Sender IDs allowed to DM (when `dmPolicy=allowlist`) |
-| `groupPolicy` | No | `disabled` | `disabled`, `allowlist`, or `open` |
-| `webhookPath` | No | `/amiko/webhook/<accountId>` | Inbound webhook path |
+| `platformApiBaseUrl` | No | `https://platform.heyamiko.com` | Base URL for `amiko-new` / platform API |
+| `chatApiBaseUrl` | No | `https://api.amiko.app` | Base URL for amiko-chat internal channel API |
+| `apiBaseUrl` | Legacy | — | Backward-compatible fallback URL. Prefer the two explicit URLs above |
+| `webhookPath` | No | `/amiko/webhook/<twinId>` | Inbound webhook path |
 | `webhookSecret` | No | — | HMAC-SHA256 secret for webhook validation |
 
 For multiple twins:
@@ -121,18 +122,19 @@ For multiple twins:
 {
   "channels": {
     "amiko": {
-      "defaultAccount": "<primaryTwinId>",
+      "defaultAccount": "main",
       "accounts": {
-        "<twinId1>": {
+        "main": {
+          "twinId": "<twinId1>",
           "token": "clawd-...",
-          "apiBaseUrl": "https://your-amiko-chat.up.railway.app",
-          "dmPolicy": "open"
+          "platformApiBaseUrl": "https://platform.heyamiko.com",
+          "chatApiBaseUrl": "https://your-amiko-chat.up.railway.app"
         },
-        "<twinId2>": {
+        "agent-foo": {
+          "twinId": "<twinId2>",
           "token": "clawd-...",
-          "apiBaseUrl": "https://your-amiko-chat.up.railway.app",
-          "dmPolicy": "allowlist",
-          "allowFrom": ["user-id-1"]
+          "platformApiBaseUrl": "https://platform.heyamiko.com",
+          "chatApiBaseUrl": "https://your-amiko-chat.up.railway.app"
         }
       }
     }
@@ -140,7 +142,7 @@ For multiple twins:
 }
 ```
 
-Each account gets its own webhook endpoint at `/amiko/webhook/<twinId>`.
+Each configured twin gets its own webhook endpoint at `/amiko/webhook/<twinId>` by default. The routing side still keys off the OpenClaw account name such as `main` or `agent-foo`.
 
 ### 7. Restart the gateway
 

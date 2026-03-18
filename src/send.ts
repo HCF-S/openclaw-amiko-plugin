@@ -8,12 +8,12 @@ export async function sendTextAmiko(
   account: ResolvedAmikoAccount,
   options?: { replyMode?: "as_owner" | "as_agent" },
 ): Promise<AmikoSendResult> {
-  const idempotencyKey = `${account.accountId}:${conversationId}:${randomUUID()}`;
+  const idempotencyKey = `${account.twinId}:${conversationId}:${randomUUID()}`;
   try {
     const res = await sendAmikoOutbound(
-      { apiBaseUrl: account.apiBaseUrl, token: account.token, timeoutMs: 30_000 },
+      { chatApiBaseUrl: account.chatApiBaseUrl, token: account.token, timeoutMs: 30_000 },
       {
-        accountId: account.accountId,
+        accountId: account.twinId,
         conversationId,
         idempotencyKey,
         type: "text",
@@ -41,12 +41,12 @@ export async function sendMediaAmiko(
   account: ResolvedAmikoAccount,
   options?: { replyMode?: "as_owner" | "as_agent" },
 ): Promise<AmikoSendResult> {
-  const idempotencyKey = `${account.accountId}:${conversationId}:${randomUUID()}`;
+  const idempotencyKey = `${account.twinId}:${conversationId}:${randomUUID()}`;
   try {
     const res = await sendAmikoOutbound(
-      { apiBaseUrl: account.apiBaseUrl, token: account.token, timeoutMs: 30_000 },
+      { chatApiBaseUrl: account.chatApiBaseUrl, token: account.token, timeoutMs: 30_000 },
       {
-        accountId: account.accountId,
+        accountId: account.twinId,
         conversationId,
         idempotencyKey,
         type: "media",
