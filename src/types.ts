@@ -27,7 +27,11 @@ export type ResolvedAmikoAccount = {
 
 // Platform API types
 
-export type AmikoEventType = "message.text" | "message.image" | "participant.added";
+export type AmikoEventType =
+  | "message.text"
+  | "message.image"
+  | "post.published"
+  | "participant.added";
 
 export type AmikoInboundEvent = {
   id: string;
@@ -42,6 +46,19 @@ export type AmikoInboundEvent = {
   mediaUrl?: string;
   mediaCaption?: string;
   mentionsBot?: boolean;
+
+  // Channel integration fields
+  replyMode?: "as_owner" | "as_agent";
+  replyExpected?: boolean;
+  ownerId?: string;
+  ownerName?: string;
+
+  // Post fields (for post.published events)
+  postId?: string;
+  authorId?: string;
+  authorName?: string;
+  authorHandle?: string;
+  mediaUrls?: string[];
 };
 
 export type AmikoWebhookPayload = {
@@ -54,6 +71,7 @@ export type AmikoOutboundPayload = {
   idempotencyKey: string;
   type: "text" | "media";
   text: string;
+  replyMode?: "as_owner" | "as_agent";
   mediaUrl?: string;
   mediaCaption?: string;
 };

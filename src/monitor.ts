@@ -29,13 +29,19 @@ function verifyHmacSignature(secret: string, body: string | Buffer, signature: s
   return timingSafeEqual(expectedBuf, actualBuf);
 }
 
-async function processEvent(
+// ── Chat message processing ─────────────────────────────────────────────────
+
+async function processChatEvent(
   event: AmikoInboundEvent,
   options: Pick<MonitorOptions, "account" | "config" | "runtime">,
 ): Promise<void> {
   const { account, runtime: core, config } = options;
+  const replyExpected = event.replyExpected !== false;
+  const replyMode = event.replyMode ?? "as_owner";
 
-  console.log(`[amiko:${account.accountId}] processEvent: type=${event.type} convId=${event.conversationId} senderId=${event.senderId}`);
+  console.log(
+    `[amiko:${account.accountId}] processChatEvent: convId=${event.conversationId} sender=${event.senderName} replyExpected=${replyExpected} replyMode=${replyMode}`,
+  );
 
   const isGroup = event.conversationType === "group";
   const conversationId = event.conversationId;
@@ -60,11 +66,8 @@ async function processEvent(
     }
   }
 
-  if (event.type !== "message.text" && event.type !== "message.image") return;
-
   const peer = { kind: event.conversationType as "direct" | "group", id: conversationId };
 
-  // Resolve agent route (determines sessionKey + agentId, same as Zalo/Telegram plugins)
   const route = core.channel.routing.resolveAgentRoute({
     cfg: config,
     channel: "amiko",
@@ -78,7 +81,31 @@ async function processEvent(
   );
 
   const rawBody = event.text?.trim() ?? "";
-  const fromLabel = isGroup ? `group:${conversationId}` : (event.senderName || `user:${event.senderId}`);
+  const fromLabel = isGroup
+    ? `group:${conversationId}`
+    : (event.senderName || `user:${event.senderId}`);
+
+  // ── replyExpected: false → inject context only, no agent response ──────────
+  if (!replyExpected) {
+    const injectMessage = `[${event.senderName || event.senderId}] ${rawBody}`;
+    console.log(
+      `[amiko:${account.accountId}] injecting context (no reply): ${injectMessage.slice(0, 100)}`,
+    );
+
+    try {
+      await core.channel.chat.inject({
+        sessionKey: route.sessionKey,
+        message: injectMessage,
+        label: event.senderName || event.senderId,
+      });
+    } catch (err) {
+      console.error(`[amiko:${account.accountId}] chat.inject failed:`, err);
+    }
+    return;
+  }
+
+  // ── replyExpected: true → full agent dispatch ──────────────────────────────
+
   const previousTimestamp = core.channel.session.readSessionUpdatedAt({
     storePath,
     sessionKey: route.sessionKey,
@@ -128,7 +155,9 @@ async function processEvent(
     accountId: account.accountId,
   });
 
-  console.log(`[amiko:${account.accountId}] dispatching reply: sessionKey=${route.sessionKey} agentId=${route.agentId}`);
+  console.log(
+    `[amiko:${account.accountId}] dispatching reply: sessionKey=${route.sessionKey} replyMode=${replyMode}`,
+  );
 
   await core.channel.reply.dispatchReplyWithBufferedBlockDispatcher({
     ctx: ctxPayload,
@@ -136,10 +165,11 @@ async function processEvent(
     dispatcherOptions: {
       ...prefixOptions,
       deliver: async (payload: { text?: string; mediaUrl?: string }) => {
-        console.log(`[amiko:${account.accountId}] deliver called: text=${!!payload.text} mediaUrl=${!!payload.mediaUrl}`);
         if (payload.text) {
-          console.log(`[amiko:${account.accountId}] delivering reply to ${conversationId}: ${payload.text.slice(0, 100)}`);
-          const result = await sendTextAmiko(conversationId, payload.text, account);
+          console.log(
+            `[amiko:${account.accountId}] delivering reply (${replyMode}) to ${conversationId}: ${payload.text.slice(0, 100)}`,
+          );
+          const result = await sendTextAmiko(conversationId, payload.text, account, { replyMode });
           if (!result.ok) {
             console.error(`[amiko:${account.accountId}] sendTextAmiko failed:`, result);
           } else {
@@ -156,6 +186,157 @@ async function processEvent(
     },
   });
 }
+
+// ── Post comment processing ─────────────────────────────────────────────────
+
+async function processPostEvent(
+  event: AmikoInboundEvent,
+  options: Pick<MonitorOptions, "account" | "config" | "runtime">,
+): Promise<void> {
+  const { account, runtime: core, config } = options;
+  const postId = event.postId ?? event.id;
+  const authorName = event.authorName ?? event.senderName ?? "Someone";
+  const content = event.text?.trim() ?? "";
+
+  console.log(
+    `[amiko:${account.accountId}] processPostEvent: postId=${postId} author=${authorName}`,
+  );
+
+  if (!content) return;
+
+  const peer = { kind: "direct" as const, id: `post:${postId}` };
+  const route = core.channel.routing.resolveAgentRoute({
+    cfg: config,
+    channel: "amiko",
+    accountId: account.accountId,
+    peer,
+  });
+
+  // One-shot session key per post
+  const sessionKey = `amiko:${account.accountId}:post:${postId}`;
+
+  const prompt = `Your friend ${authorName} posted:\n\n"${content}"\n\nIf you'd like to comment on this post, write your comment. If you don't want to comment, respond with <empty-response/> only.`;
+
+  const storePath = core.channel.session.resolveStorePath(
+    (config as any).session?.store,
+    { agentId: route.agentId },
+  );
+
+  const ctxPayload = core.channel.reply.finalizeInboundContext({
+    Body: prompt,
+    BodyForAgent: prompt,
+    RawBody: prompt,
+    CommandBody: prompt,
+    From: `amiko:post:${postId}`,
+    To: `amiko:${account.accountId}`,
+    SessionKey: sessionKey,
+    AccountId: route.accountId,
+    ChatType: "direct",
+    ConversationLabel: `post by ${authorName}`,
+    SenderName: authorName,
+    SenderId: event.authorId ?? event.senderId,
+    Provider: "amiko",
+    Surface: "amiko",
+    MessageSid: event.id,
+    OriginatingChannel: "amiko",
+    OriginatingTo: `amiko:post:${postId}`,
+  });
+
+  await core.channel.session.recordInboundSession({
+    storePath,
+    sessionKey,
+    ctx: ctxPayload,
+    onRecordError: (err: unknown) => {
+      console.error(`[amiko:${account.accountId}] recordInboundSession error (post):`, err);
+    },
+  });
+
+  const { onModelSelected, ...prefixOptions } = createReplyPrefixOptions({
+    cfg: config,
+    agentId: route.agentId,
+    channel: "amiko",
+    accountId: account.accountId,
+  });
+
+  console.log(
+    `[amiko:${account.accountId}] dispatching post comment: sessionKey=${sessionKey}`,
+  );
+
+  await core.channel.reply.dispatchReplyWithBufferedBlockDispatcher({
+    ctx: ctxPayload,
+    cfg: config,
+    dispatcherOptions: {
+      ...prefixOptions,
+      deliver: async (payload: { text?: string }) => {
+        if (!payload.text) return;
+
+        const text = payload.text.trim();
+
+        // Agent chose not to comment
+        if (text === "<empty-response/>" || text.includes("<empty-response/>")) {
+          console.log(`[amiko:${account.accountId}] agent skipped post comment for ${postId}`);
+          return;
+        }
+
+        // Post comment via amiko-new API
+        const commentUrl = `${account.apiBaseUrl}/api/posts/${postId}/comments`;
+        console.log(
+          `[amiko:${account.accountId}] posting comment on ${postId}: ${text.slice(0, 100)}`,
+        );
+
+        try {
+          const res = await fetch(commentUrl, {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${account.token}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ comment: text }),
+          });
+
+          if (!res.ok) {
+            const errText = await res.text().catch(() => "");
+            console.error(
+              `[amiko:${account.accountId}] comment POST failed: ${res.status} ${errText.slice(0, 200)}`,
+            );
+          } else {
+            const data = (await res.json()) as { comment?: { id?: string } };
+            console.log(
+              `[amiko:${account.accountId}] comment posted ok: ${data.comment?.id ?? "unknown"}`,
+            );
+          }
+        } catch (err) {
+          console.error(`[amiko:${account.accountId}] comment POST error:`, err);
+        }
+      },
+      onError: (err: unknown, info: { kind: string }) => {
+        console.error(`[amiko:${account.accountId}] ${info.kind} post reply error:`, err);
+      },
+    },
+    replyOptions: {
+      onModelSelected,
+    },
+  });
+}
+
+// ── Event dispatcher ────────────────────────────────────────────────────────
+
+async function processEvent(
+  event: AmikoInboundEvent,
+  options: Pick<MonitorOptions, "account" | "config" | "runtime">,
+): Promise<void> {
+  if (event.type === "post.published") {
+    return processPostEvent(event, options);
+  }
+
+  if (event.type === "message.text" || event.type === "message.image") {
+    return processChatEvent(event, options);
+  }
+
+  console.log(`[amiko:${options.account.accountId}] ignoring event type: ${event.type}`);
+}
+
+// ── Webhook monitor ─────────────────────────────────────────────────────────
 
 export async function monitorAmikoProvider(options: MonitorOptions): Promise<MonitorHandle> {
   const { account, statusSink, registerHttpRoute } = options;

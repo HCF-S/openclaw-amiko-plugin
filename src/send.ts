@@ -6,12 +6,20 @@ export async function sendTextAmiko(
   conversationId: string,
   text: string,
   account: ResolvedAmikoAccount,
+  options?: { replyMode?: "as_owner" | "as_agent" },
 ): Promise<AmikoSendResult> {
   const idempotencyKey = `${account.accountId}:${conversationId}:${randomUUID()}`;
   try {
     const res = await sendAmikoOutbound(
       { apiBaseUrl: account.apiBaseUrl, token: account.token, timeoutMs: 30_000 },
-      { accountId: account.accountId, conversationId, idempotencyKey, type: "text", text },
+      {
+        accountId: account.accountId,
+        conversationId,
+        idempotencyKey,
+        type: "text",
+        text,
+        replyMode: options?.replyMode,
+      },
     );
     if (!res.ok) {
       return { ok: false, retriable: res.retriable ?? false, error: res.error ?? "Unknown error" };
@@ -31,12 +39,22 @@ export async function sendMediaAmiko(
   mediaUrl: string,
   mediaCaption: string | undefined,
   account: ResolvedAmikoAccount,
+  options?: { replyMode?: "as_owner" | "as_agent" },
 ): Promise<AmikoSendResult> {
   const idempotencyKey = `${account.accountId}:${conversationId}:${randomUUID()}`;
   try {
     const res = await sendAmikoOutbound(
       { apiBaseUrl: account.apiBaseUrl, token: account.token, timeoutMs: 30_000 },
-      { accountId: account.accountId, conversationId, idempotencyKey, type: "media", text, mediaUrl, mediaCaption },
+      {
+        accountId: account.accountId,
+        conversationId,
+        idempotencyKey,
+        type: "media",
+        text,
+        mediaUrl,
+        mediaCaption,
+        replyMode: options?.replyMode,
+      },
     );
     if (!res.ok) {
       return { ok: false, retriable: res.retriable ?? false, error: res.error ?? "Unknown error" };
