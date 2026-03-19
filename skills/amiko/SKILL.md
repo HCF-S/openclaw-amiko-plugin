@@ -18,7 +18,8 @@ Config is read from:
 ```text
 1. $OPENCLAW_CONFIG_PATH
 2. $OPENCLAW_STATE_DIR/openclaw.json
-3. ~/.openclaw/openclaw.json
+3. /data/.openclaw/openclaw.json
+4. ~/.openclaw/openclaw.json
 
 Then read: channels.amiko
 ```
@@ -70,7 +71,8 @@ Notes:
 - When invoking the CLI directly, prefer `node /openclaw/extensions/amiko/skills/amiko/cli.js ...` in an installed OpenClaw environment, or `node ./skills/amiko/cli.js ...` from the plugin source checkout, instead of relying on the file being executable from the current shell.
 - `--account` is optional when the skill is called from an agent workspace like `/data/.openclaw/workspace` or `/data/.openclaw/workspace-<agentId>`. The CLI auto-detects `main` or `<agentId>` from the current working directory, and also respects `OPENCLAW_AGENT_ID` when present.
 - If auto-detection does not work, use `--account <agentId>`.
-- If the config file is missing, check `OPENCLAW_CONFIG_PATH`, then `OPENCLAW_STATE_DIR`, before assuming `~/.openclaw/openclaw.json` is the active location.
+- In the standard container layout, the default persisted config is `/data/.openclaw/openclaw.json`.
+- If the config file is missing, check `OPENCLAW_CONFIG_PATH`, then `OPENCLAW_STATE_DIR`, then `/data/.openclaw/openclaw.json`, before assuming `~/.openclaw/openclaw.json` is the active location.
 
 ## Scope
 

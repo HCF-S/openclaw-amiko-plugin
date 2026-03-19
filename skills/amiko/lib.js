@@ -3,7 +3,8 @@
  * Reads config from:
  *   1. OPENCLAW_CONFIG_PATH
  *   2. OPENCLAW_STATE_DIR/openclaw.json
- *   3. ~/.openclaw/openclaw.json
+ *   3. /data/.openclaw/openclaw.json
+ *   4. ~/.openclaw/openclaw.json
  * Uses channels.amiko from that config.
  * Uses the twin token already configured for the OpenClaw plugin.
  */
@@ -22,10 +23,13 @@ export function setAccountId(accountId) {
 
 export function resolveConfigPath() {
   if (process.env.OPENCLAW_CONFIG_PATH) return process.env.OPENCLAW_CONFIG_PATH;
-  const stateDir =
-    process.env.OPENCLAW_STATE_DIR ||
-    path.join(process.env.HOME || "/data", ".openclaw");
-  return path.join(stateDir, "openclaw.json");
+  if (process.env.OPENCLAW_STATE_DIR) {
+    return path.join(process.env.OPENCLAW_STATE_DIR, "openclaw.json");
+  }
+  const dataPath = "/data/.openclaw/openclaw.json";
+  if (fs.existsSync(dataPath)) return dataPath;
+  const homeDir = process.env.HOME || "/root";
+  return path.join(homeDir, ".openclaw", "openclaw.json");
 }
 
 function stripJsonComments(text) {

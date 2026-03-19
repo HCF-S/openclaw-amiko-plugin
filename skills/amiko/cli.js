@@ -82,7 +82,8 @@ Amiko Skill CLI
 Config source:
   1. $OPENCLAW_CONFIG_PATH
   2. $OPENCLAW_STATE_DIR/openclaw.json
-  3. ~/.openclaw/openclaw.json
+  3. /data/.openclaw/openclaw.json
+  4. ~/.openclaw/openclaw.json
   Then read channels.amiko from that file.
 
 CLI path:
