@@ -1,6 +1,10 @@
 /**
  * Amiko Platform API Library
- * Reads config from ~/.openclaw/openclaw.json -> channels.amiko
+ * Reads config from:
+ *   1. OPENCLAW_CONFIG_PATH
+ *   2. OPENCLAW_STATE_DIR/openclaw.json
+ *   3. ~/.openclaw/openclaw.json
+ * Uses channels.amiko from that config.
  * Uses the twin token already configured for the OpenClaw plugin.
  */
 

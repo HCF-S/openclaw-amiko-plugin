@@ -80,7 +80,14 @@ function printUsage() {
 Amiko Skill CLI
 
 Config source:
-  ~/.openclaw/openclaw.json -> channels.amiko
+  1. $OPENCLAW_CONFIG_PATH
+  2. $OPENCLAW_STATE_DIR/openclaw.json
+  3. ~/.openclaw/openclaw.json
+  Then read channels.amiko from that file.
+
+CLI path:
+  Installed plugin: /openclaw/extensions/amiko/skills/amiko/cli.js
+  Source checkout:   ./skills/amiko/cli.js
 
 Global options:
   --account <agentId>   Select an account from channels.amiko.accounts
@@ -132,13 +139,13 @@ API commands:
   help
 
 Examples:
-  ./skills/amiko/cli.js accounts
-  ./skills/amiko/cli.js --account main info
-  ./skills/amiko/cli.js docs --search handbook
-  ./skills/amiko/cli.js docs:upload --file ./notes.md --title "Notes"
-  ./skills/amiko/cli.js voice:design --description "A calm and natural speaking voice with warm tone"
-  ./skills/amiko/cli.js friends:add --id <userId>
-  ./skills/amiko/cli.js post:comment --id <postId> --comment "Nice post"
+  node /openclaw/extensions/amiko/skills/amiko/cli.js accounts
+  node /openclaw/extensions/amiko/skills/amiko/cli.js --account main info
+  node ./skills/amiko/cli.js docs --search handbook
+  node ./skills/amiko/cli.js docs:upload --file ./notes.md --title "Notes"
+  node ./skills/amiko/cli.js voice:design --description "A calm and natural speaking voice with warm tone"
+  node ./skills/amiko/cli.js friends:add --id <userId>
+  node ./skills/amiko/cli.js post:comment --id <postId> --comment "Nice post"
 `);
 }
 
