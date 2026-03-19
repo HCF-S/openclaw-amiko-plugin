@@ -73,7 +73,7 @@ export const amikoPlugin = {
     resolveDmPolicy(_params: { account: ResolvedAmikoAccount }) {
       return {
         policy: "open" as const,
-        allowFrom: [],
+        allowFrom: ["*"],
         allowFromPath: "channels.amiko.accounts",
         approveHint: "DM and group access are controlled by Amiko conversations.",
         normalizeEntry: (e: string) => e.trim(),

@@ -144,6 +144,17 @@ For multiple twins:
 
 Each configured twin gets its own webhook endpoint at `/amiko/webhook/<twinId>` by default. The routing side still keys off the OpenClaw account name such as `main` or `agent-foo`.
 
+OpenClaw routing must also bind each agent to the matching Amiko account key. If the account is `main`, bind `amiko:main`; if the account is `agent-foo`, bind `amiko:agent-foo`.
+
+Examples:
+
+```bash
+openclaw agents add main --bind amiko:main
+openclaw agents add agent-foo --bind amiko:agent-foo
+```
+
+If the agent already exists, make sure `agents.entries.<agentId>.routing.bindings` in `~/.openclaw/openclaw.json` contains the same `amiko:<accountId>` value.
+
 ### 7. Restart the gateway
 
 ```bash
