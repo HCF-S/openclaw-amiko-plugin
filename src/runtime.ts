@@ -41,18 +41,8 @@ export type PluginRuntime = {
   };
 };
 
-export type HttpRouteOptions = {
-  path: string;
-  auth: "plugin" | "gateway";
-  match?: "exact" | "prefix";
-  replaceExisting?: boolean;
-  handler: (req: any, res: any) => boolean | Promise<boolean>;
-};
-
-export type RegisterHttpRouteFn = (opts: HttpRouteOptions) => void;
-
 let runtime: PluginRuntime | null = null;
-let registerHttpRouteFn: RegisterHttpRouteFn | null = null;
+const webhookDispatchers = new Map<string, (req: any, res: any) => Promise<void> | void>();
 
 export function setAmikoRuntime(next: PluginRuntime): void {
   runtime = next;
@@ -63,11 +53,22 @@ export function getAmikoRuntime(): PluginRuntime {
   return runtime;
 }
 
-export function setAmikoRegisterHttpRoute(fn: RegisterHttpRouteFn): void {
-  registerHttpRouteFn = fn;
+export function setWebhookDispatcher(
+  path: string,
+  handler: ((req: any, res: any) => Promise<void> | void) | null,
+): void {
+  if (!path) return;
+  if (!handler) {
+    webhookDispatchers.delete(path);
+    return;
+  }
+  webhookDispatchers.set(path, handler);
 }
 
-export function getAmikoRegisterHttpRoute(): RegisterHttpRouteFn {
-  if (!registerHttpRouteFn) throw new Error("Amiko registerHttpRoute not initialized");
-  return registerHttpRouteFn;
+export async function dispatchWebhookRequest(req: any, res: any): Promise<boolean> {
+  const pathname = new URL(req.url ?? "/", "http://localhost").pathname;
+  const handler = webhookDispatchers.get(pathname);
+  if (!handler) return false;
+  await handler(req, res);
+  return true;
 }

@@ -7,13 +7,15 @@ import {
 } from "./accounts.js";
 import { sendTextAmiko, sendMediaAmiko } from "./send.js";
 import { probeAmikoAccount, buildAmikoAccountSnapshot, inspectAmikoAccount } from "./status.js";
-import { getAmikoRegisterHttpRoute, getAmikoRuntime } from "./runtime.js";
+import { getAmikoRuntime, setWebhookDispatcher } from "./runtime.js";
 
-// buildChannelConfigSchema is a no-op wrapper in this standalone plugin;
-// the real implementation is provided by the OpenClaw SDK at runtime.
+// Local builds use zod v3 while the runtime SDK may use a newer zod type surface.
+// Keep this wrapper as a pass-through so the plugin stays buildable across both.
 function buildChannelConfigSchema<T>(schema: T): T {
   return schema;
 }
+
+const activeRouteUnregisters = new Map<string, () => void>();
 
 export const amikoPlugin = {
   id: "amiko",
@@ -93,10 +95,7 @@ export const amikoPlugin = {
     chunkerMode: "markdown" as const,
 
     async sendText({ to, text, account }: { to: string; text: string; account: ResolvedAmikoAccount; cfg: unknown; accountId: string }) {
-      console.log(`[amiko:outbound] sendText to=${to} textLen=${text?.length}`);
-      const result = await sendTextAmiko(to, text, account);
-      console.log(`[amiko:outbound] sendText result:`, result);
-      return result;
+      return sendTextAmiko(to, text, account);
     },
 
     async sendMedia({ to, text, mediaUrl, account }: { to: string; text: string; mediaUrl: string; cfg: unknown; accountId: string; account: ResolvedAmikoAccount }) {
@@ -123,15 +122,47 @@ export const amikoPlugin = {
       abortSignal: AbortSignal;
       setStatus: (patch: any) => void;
     }) {
-      const { monitorAmikoProvider } = await import("./monitor.js");
-      return monitorAmikoProvider({
-        account: ctx.account,
-        config: ctx.cfg,
-        runtime: getAmikoRuntime(),
-        abortSignal: ctx.abortSignal,
-        statusSink: (patch) => ctx.setStatus({ accountId: ctx.accountId, ...patch }),
-        registerHttpRoute: getAmikoRegisterHttpRoute(),
-      });
+      try {
+        const runtime = getAmikoRuntime();
+
+        const { monitorAmikoProvider } = await import("./monitor.js");
+        const handle = await monitorAmikoProvider({
+          account: ctx.account,
+          config: ctx.cfg,
+          runtime,
+          abortSignal: ctx.abortSignal,
+          statusSink: (patch) => ctx.setStatus({ accountId: ctx.accountId, ...patch }),
+        });
+
+        const routeKey = `${ctx.accountId}:${handle.webhookPath}`;
+        const prevUnregister = activeRouteUnregisters.get(routeKey);
+        if (prevUnregister) {
+          prevUnregister();
+          activeRouteUnregisters.delete(routeKey);
+        }
+
+        setWebhookDispatcher(handle.webhookPath, handle.handler);
+        activeRouteUnregisters.set(routeKey, () => {
+          setWebhookDispatcher(handle.webhookPath, null);
+        });
+
+        let stopped = false;
+        const stop = () => {
+          if (stopped) return;
+          stopped = true;
+          const unregister = activeRouteUnregisters.get(routeKey);
+          unregister?.();
+          activeRouteUnregisters.delete(routeKey);
+          handle.stop();
+        };
+
+        ctx.abortSignal.addEventListener("abort", stop, { once: true });
+
+        return { stop };
+      } catch (err) {
+        console.error(`[amiko:startAccount] FAILED for account=${ctx.accountId}:`, err);
+        throw err;
+      }
     },
   },
 };

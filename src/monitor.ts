@@ -1,6 +1,6 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import type { ResolvedAmikoAccount, AmikoInboundEvent, AmikoWebhookPayload } from "./types.js";
-import type { PluginRuntime, RegisterHttpRouteFn } from "./runtime.js";
+import type { PluginRuntime } from "./runtime.js";
 import type { ProbeResult } from "./status.js";
 import { sendTextAmiko } from "./send.js";
 import { createReplyPrefixOptions } from "./reply-prefix.js";
@@ -11,11 +11,12 @@ export type MonitorOptions = {
   runtime: PluginRuntime;
   abortSignal: AbortSignal;
   statusSink: (patch: Partial<ProbeResult> & { accountId: string }) => void;
-  registerHttpRoute: RegisterHttpRouteFn;
 };
 
 export type MonitorHandle = {
   stop: () => void;
+  webhookPath: string;
+  handler: (req: any, res: any) => Promise<void>;
 };
 
 function verifyHmacSignature(secret: string, body: string | Buffer, signature: string): boolean {
@@ -318,77 +319,74 @@ async function processEvent(
 // ── Webhook monitor ─────────────────────────────────────────────────────────
 
 export async function monitorAmikoProvider(options: MonitorOptions): Promise<MonitorHandle> {
-  const { account, statusSink, registerHttpRoute } = options;
+  const { account, statusSink } = options;
   const webhookPath =
     account.config.webhookPath ?? `/amiko/webhook/${account.twinId}`;
   const webhookSecret = account.config.webhookSecret;
 
-  registerHttpRoute({
-    path: webhookPath,
-    auth: "gateway",
-    match: "exact",
-    replaceExisting: true,
-    handler: async (req: any, res: any) => {
-      // Read raw body from Node.js IncomingMessage stream
-      const rawBody: Buffer = await new Promise((resolve, reject) => {
-        const chunks: Buffer[] = [];
-        req.on("data", (chunk: Buffer) => chunks.push(chunk));
-        req.on("end", () => resolve(Buffer.concat(chunks)));
-        req.on("error", reject);
-      });
+  const handler = async (req: any, res: any) => {
+    const sendJson = (statusCode: number, body: unknown) => {
+      const json = JSON.stringify(body);
+      res.statusCode = statusCode;
+      res.setHeader("Content-Type", "application/json");
+      res.setHeader("Content-Length", Buffer.byteLength(json));
+      res.end(json);
+    };
 
-      const sendJson = (statusCode: number, body: unknown) => {
-        const json = JSON.stringify(body);
-        res.statusCode = statusCode;
-        res.setHeader("Content-Type", "application/json");
-        res.setHeader("Content-Length", Buffer.byteLength(json));
-        res.end(json);
-      };
+    if ((req.method ?? "POST").toUpperCase() !== "POST") {
+      sendJson(405, { error: "method not allowed" });
+      return;
+    }
 
-      // Verify HMAC signature when a secret is configured
-      if (webhookSecret) {
-        const sig = req.headers["x-amiko-signature"] as string | undefined;
-        if (!sig) { sendJson(401, { error: "missing signature" }); return true; }
-        if (!verifyHmacSignature(webhookSecret, rawBody, sig)) {
-          sendJson(401, { error: "invalid signature" });
-          return true;
-        }
+    const rawBody: Buffer = await new Promise((resolve, reject) => {
+      const chunks: Buffer[] = [];
+      req.on("data", (chunk: Buffer) => chunks.push(chunk));
+      req.on("end", () => resolve(Buffer.concat(chunks)));
+      req.on("error", reject);
+    });
+
+    if (webhookSecret) {
+      const sig = req.headers["x-amiko-signature"] as string | undefined;
+      if (!sig) {
+        sendJson(401, { error: "missing signature" });
+        return;
       }
-
-      let payload: AmikoWebhookPayload;
-      try {
-        payload = JSON.parse(rawBody.toString("utf8")) as AmikoWebhookPayload;
-      } catch {
-        sendJson(400, { error: "invalid JSON" });
-        return true;
+      if (!verifyHmacSignature(webhookSecret, rawBody, sig)) {
+        sendJson(401, { error: "invalid signature" });
+        return;
       }
+    }
 
-      const event = payload?.event;
-      if (!event?.id || !event?.type) {
-        sendJson(400, { error: "missing event" });
-        return true;
-      }
+    let payload: AmikoWebhookPayload;
+    try {
+      payload = JSON.parse(rawBody.toString("utf8")) as AmikoWebhookPayload;
+    } catch {
+      sendJson(400, { error: "invalid JSON" });
+      return;
+    }
 
-      // Respond 200 immediately (ack), then process asynchronously
-      sendJson(200, { ok: true });
+    const event = payload?.event;
+    if (!event?.id || !event?.type) {
+      sendJson(400, { error: "missing event" });
+      return;
+    }
 
-      try {
-        await processEvent(event, options);
-        statusSink({ accountId: account.accountId, status: "healthy" });
-      } catch (err) {
-        console.error(`[amiko:${account.accountId}] Error processing event ${event.id}:`, err);
-        statusSink({ accountId: account.accountId, status: "unhealthy", message: String(err) });
-      }
+    sendJson(200, { ok: true });
 
-      return true;
-    },
-  });
+    try {
+      await processEvent(event, options);
+      statusSink({ accountId: account.accountId, status: "healthy" });
+    } catch (err) {
+      console.error(`[amiko:${account.accountId}] Error processing event ${event.id}:`, err);
+      statusSink({ accountId: account.accountId, status: "unhealthy", message: String(err) });
+    }
+  };
 
   statusSink({ accountId: account.accountId, status: "healthy" });
 
   return {
-    stop: () => {
-      // Route will be replaced on next startAccount; nothing to tear down.
-    },
+    webhookPath,
+    handler,
+    stop: () => {},
   };
 }

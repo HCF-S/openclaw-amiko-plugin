@@ -7,6 +7,18 @@ declare module "openclaw/plugin-sdk" {
 
   export function buildChannelConfigSchema<T>(schema: T): T;
   export function emptyPluginConfigSchema(): unknown;
+  export function registerPluginHttpRoute(params: {
+    path?: string | null;
+    fallbackPath?: string | null;
+    handler: (req: any, res: any) => Promise<void> | void;
+    auth: "plugin" | "gateway";
+    match?: "exact" | "prefix";
+    replaceExisting?: boolean;
+    pluginId?: string;
+    source?: string;
+    accountId?: string;
+    log?: (message: string) => void;
+  }): () => void;
 
   export type DmPolicy = "allowlist" | "open" | "disabled";
   export type GroupPolicy = "disabled" | "allowlist" | "open";
