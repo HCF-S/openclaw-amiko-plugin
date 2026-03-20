@@ -65,27 +65,6 @@ async function processChatEvent(
     ? `group:${conversationId}`
     : (event.senderName || `user:${event.senderId}`);
 
-  // ── replyExpected: false → inject context only, no agent response ──────────
-  if (!replyExpected) {
-    const injectMessage = `[${event.senderName || event.senderId}] ${rawBody}`;
-    console.log(
-      `[amiko:${account.accountId}] injecting context (no reply): ${injectMessage.slice(0, 100)}`,
-    );
-
-    try {
-      await core.channel.chat.inject({
-        sessionKey: route.sessionKey,
-        message: injectMessage,
-        label: event.senderName || event.senderId,
-      });
-    } catch (err) {
-      console.error(`[amiko:${account.accountId}] chat.inject failed:`, err);
-    }
-    return;
-  }
-
-  // ── replyExpected: true → full agent dispatch ──────────────────────────────
-
   const previousTimestamp = core.channel.session.readSessionUpdatedAt({
     storePath,
     sessionKey: route.sessionKey,
@@ -118,6 +97,25 @@ async function processChatEvent(
     OriginatingChannel: "amiko",
     OriginatingTo: `amiko:${conversationId}`,
   });
+
+  // ── replyExpected: false → persist context only, no agent response ─────────
+  if (!replyExpected) {
+    console.log(
+      `[amiko:${account.accountId}] recording context only (no reply): ${rawBody.slice(0, 100)}`,
+    );
+
+    await core.channel.session.recordInboundSession({
+      storePath,
+      sessionKey: ctxPayload.SessionKey ?? route.sessionKey,
+      ctx: ctxPayload,
+      onRecordError: (err: unknown) => {
+        console.error(`[amiko:${account.accountId}] recordInboundSession error:`, err);
+      },
+    });
+    return;
+  }
+
+  // ── replyExpected: true → full agent dispatch ──────────────────────────────
 
   await core.channel.session.recordInboundSession({
     storePath,

@@ -66,8 +66,8 @@ export const amikoPlugin = {
       return buildAmikoAccountSnapshot(account);
     },
 
-    inspectAccount(account: ResolvedAmikoAccount): Record<string, unknown> {
-      return inspectAmikoAccount(account);
+    inspectAccount(cfg: unknown, accountId: string): Record<string, unknown> {
+      return inspectAmikoAccount(resolveAmikoAccount({ cfg: cfg as any, accountId }));
     },
   },
 
@@ -156,9 +156,21 @@ export const amikoPlugin = {
           handle.stop();
         };
 
-        ctx.abortSignal.addEventListener("abort", stop, { once: true });
+        if (ctx.abortSignal.aborted) {
+          stop();
+          return;
+        }
 
-        return { stop };
+        await new Promise<void>((resolve) => {
+          ctx.abortSignal.addEventListener(
+            "abort",
+            () => {
+              stop();
+              resolve();
+            },
+            { once: true },
+          );
+        });
       } catch (err) {
         console.error(`[amiko:startAccount] FAILED for account=${ctx.accountId}:`, err);
         throw err;
