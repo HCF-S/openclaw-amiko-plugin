@@ -1,4 +1,4 @@
-# @heyamiko/amiko
+# @heyamiko/openclaw-plugin
 
 An [OpenClaw](https://openclaw.dev) channel plugin that connects your OpenClaw agent to [Amiko](https://heyamiko.com), enabling direct and group chat via webhook.
 
@@ -44,13 +44,13 @@ contracts/                JSON Schemas for API payloads
 ### 1. Install from npm
 
 ```bash
-npm install -g @heyamiko/amiko
+npm install -g @heyamiko/openclaw-plugin
 ```
 
 Or install directly through OpenClaw:
 
 ```bash
-openclaw plugins install @heyamiko/amiko
+openclaw plugins install @heyamiko/openclaw-plugin
 ```
 
 ### 2. Obtain your Twin Token
