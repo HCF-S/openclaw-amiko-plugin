@@ -32,6 +32,7 @@ export type AmikoEventType =
   | "message.text"
   | "message.image"
   | "post.published"
+  | "post.comment"
   | "participant.added";
 
 export type AmikoInboundEvent = {
@@ -54,8 +55,9 @@ export type AmikoInboundEvent = {
   ownerId?: string;
   ownerName?: string;
 
-  // Post fields (for post.published events)
+  // Post fields (for post.published / post.comment events)
   postId?: string;
+  commentId?: string;
   authorId?: string;
   authorName?: string;
   authorHandle?: string;
