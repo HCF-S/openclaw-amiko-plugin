@@ -1,6 +1,6 @@
 # @heyamiko/openclaw-plugin
 
-An [OpenClaw](https://openclaw.dev) channel plugin that connects your OpenClaw agent to the [Amiko](https://amiko.app) platform, enabling direct and group chat via webhook.
+An [OpenClaw](https://openclaw.dev) channel plugin that connects your OpenClaw agent to [Amiko](https://heyamiko.com), enabling direct and group chat via webhook.
 
 ## Overview
 
@@ -58,7 +58,7 @@ openclaw plugins install @heyamiko/openclaw-plugin
 The `token` is a **Twin Token** (JWT with `clawd-` prefix) that identifies the twin on the Amiko platform. It is used to authenticate API calls this plugin makes to amiko-chat.
 
 To get a token:
-1. Log in to the Amiko platform and go to your agent's deploy page.
+1. Log in to the Amiko platform at `https://platform.heyamiko.com` and go to your agent's deploy page.
 2. The twin token is generated when the agent is deployed.
 3. Keep the token secret — treat it like a password.
 
