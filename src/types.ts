@@ -54,6 +54,7 @@ export type AmikoInboundEvent = {
   replyExpected?: boolean;
   ownerId?: string;
   ownerName?: string;
+  sharedAccountPrompt?: string;
 
   // Post fields (for post.published / post.comment events)
   postId?: string;

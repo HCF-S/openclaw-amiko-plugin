@@ -29,6 +29,43 @@ function verifyHmacSignature(secret: string, body: string | Buffer, signature: s
   return timingSafeEqual(expectedBuf, actualBuf);
 }
 
+function buildAmikoReplyContext(event: AmikoInboundEvent, account: ResolvedAmikoAccount): string {
+  const replyMode = event.replyMode ?? "as_owner";
+  const lines = [
+    "Amiko reply context:",
+    `- Channel account: ${account.accountId}`,
+    `- Twin ID: ${account.twinId}`,
+    `- Reply mode: ${replyMode}`,
+  ];
+
+  if (replyMode === "as_owner") {
+    lines.push(
+      `- You are replying on behalf of the owner${event.ownerName ? `, ${event.ownerName}` : ""}.`,
+      `- Write as the owner in first person. Do not describe yourself as an AI, assistant, or proxy unless the owner explicitly wants that.`,
+    );
+    if (event.ownerId) {
+      lines.push(`- Owner ID: ${event.ownerId}`);
+    }
+    if (event.sharedAccountPrompt?.trim()) {
+      lines.push(`- Shared account prompt: ${event.sharedAccountPrompt.trim()}`);
+    }
+  } else {
+    lines.push(
+      "- You are replying as the twin/agent identity, not as the owner.",
+      "- Write as that persona directly in first person.",
+    );
+  }
+
+  if (event.senderName || event.senderId) {
+    lines.push(`- Incoming sender: ${event.senderName || event.senderId}`);
+  }
+  if (event.conversationType) {
+    lines.push(`- Conversation type: ${event.conversationType}`);
+  }
+
+  return lines.join("\n");
+}
+
 // ── Chat message processing ─────────────────────────────────────────────────
 
 async function processChatEvent(
@@ -61,6 +98,8 @@ async function processChatEvent(
   );
 
   const rawBody = event.text?.trim() ?? "";
+  const roleContext = buildAmikoReplyContext(event, account);
+  const agentBody = `${roleContext}\n\nIncoming message:\n${rawBody}`.trim();
   const fromLabel = isGroup
     ? `group:${conversationId}`
     : (event.senderName || `user:${event.senderId}`);
@@ -75,12 +114,12 @@ async function processChatEvent(
     timestamp: event.timestamp,
     previousTimestamp,
     envelope: core.channel.reply.resolveEnvelopeFormatOptions(config),
-    body: rawBody,
+    body: agentBody,
   });
 
   const ctxPayload = core.channel.reply.finalizeInboundContext({
     Body: body,
-    BodyForAgent: rawBody,
+    BodyForAgent: agentBody,
     RawBody: rawBody,
     CommandBody: rawBody,
     From: isGroup ? `amiko:group:${conversationId}` : `amiko:${event.senderId}`,
