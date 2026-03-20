@@ -1,4 +1,4 @@
-# openclaw-amiko-plugin
+# @heyamiko/openclaw-plugin
 
 An [OpenClaw](https://openclaw.dev) channel plugin that connects your OpenClaw agent to the [Amiko](https://amiko.app) platform, enabling direct and group chat via webhook.
 
@@ -36,41 +36,24 @@ contracts/                JSON Schemas for API payloads
 ## Requirements
 
 - [Node.js](https://nodejs.org) >= 18
-- [pnpm](https://pnpm.io) >= 8
 - [OpenClaw](https://openclaw.dev) installed and configured
+- [pnpm](https://pnpm.io) >= 8 for local development only
 
-## Local Installation
+## Installation
 
-### 1. Clone the repository
-
-```bash
-git clone https://github.com/HCF-S/openclaw-amiko-plugin
-cd openclaw-amiko-plugin
-```
-
-### 2. Install dependencies
+### 1. Install from npm
 
 ```bash
-pnpm install
+npm install -g @heyamiko/openclaw-plugin
 ```
 
-### 3. Build the plugin
+Or install directly through OpenClaw:
 
 ```bash
-pnpm run build
+openclaw plugins install @heyamiko/openclaw-plugin
 ```
 
-This compiles TypeScript to `dist/`.
-
-### 4. Install into OpenClaw
-
-```bash
-openclaw plugins install ~/openclaw-amiko-plugin/
-```
-
-OpenClaw will copy the plugin to `~/.openclaw/extensions/amiko/` and register it in its config.
-
-### 5. Obtain your Twin Token
+### 2. Obtain your Twin Token
 
 The `token` is a **Twin Token** (JWT with `clawd-` prefix) that identifies the twin on the Amiko platform. It is used to authenticate API calls this plugin makes to amiko-chat.
 
@@ -81,7 +64,7 @@ To get a token:
 
 > **Note:** The account key in `channels.amiko.accounts` should be the OpenClaw agent ID, such as `main` or `agent-foo`. Put the actual Amiko twin ID in `twinId`.
 
-### 6. Configure the channel
+### 3. Configure the channel
 
 Add the following to your OpenClaw config (`~/.openclaw/openclaw.json`):
 
@@ -155,7 +138,7 @@ openclaw agents add agent-foo --bind amiko:agent-foo
 
 If the agent already exists, make sure `agents.entries.<agentId>.routing.bindings` in `~/.openclaw/openclaw.json` contains the same `amiko:<accountId>` value.
 
-### 7. Restart the gateway
+### 4. Restart the gateway
 
 ```bash
 openclaw gateway restart
@@ -186,6 +169,15 @@ The plugin handles two event types on the same webhook endpoint:
 
 ## Development
 
+### Local development setup
+
+```bash
+git clone https://github.com/HCF-S/openclaw-amiko-plugin
+cd openclaw-amiko-plugin
+pnpm install
+pnpm run build
+```
+
 ### Type check
 
 ```bash
@@ -198,7 +190,7 @@ pnpm run typecheck
 pnpm run test:m0
 ```
 
-All 27 tests should pass with no external dependencies.
+All 20 tests should pass with no external dependencies.
 
 ## Planning Docs
 
