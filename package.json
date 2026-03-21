@@ -1,6 +1,6 @@
 {
   "name": "@heyamiko/openclaw-plugin",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "OpenClaw channel plugin for connecting agents to the Amiko platform via webhook.",
   "type": "module",
   "main": "./dist/index.js",
