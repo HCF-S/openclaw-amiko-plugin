@@ -123,11 +123,11 @@ function resolveAmikoAccount(params: {
 }
 
 function buildSessionKey(
-  accountId: string,
+  agentId: string,
   conversationType: "direct" | "group",
   conversationId: string,
 ): string {
-  return `amiko:${accountId}:${conversationType}:${conversationId}`;
+  return `agent:${agentId}:amiko:${conversationType}:${conversationId}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -258,14 +258,14 @@ describe("OCP-003: Session key convention", () => {
   it("direct session key format", () => {
     assert.equal(
       buildSessionKey("prod", "direct", "conv_abc123"),
-      "amiko:prod:direct:conv_abc123",
+      "agent:prod:amiko:direct:conv_abc123",
     );
   });
 
   it("group session key format", () => {
     assert.equal(
       buildSessionKey("prod", "group", "conv_abc123"),
-      "amiko:prod:group:conv_abc123",
+      "agent:prod:amiko:group:conv_abc123",
     );
   });
 
@@ -284,7 +284,7 @@ describe("OCP-003: Session key convention", () => {
   it("default account key uses 'main'", () => {
     assert.equal(
       buildSessionKey(DEFAULT_ACCOUNT_ID, "direct", "conv_y"),
-      "amiko:main:direct:conv_y",
+      "agent:main:amiko:direct:conv_y",
     );
   });
 });

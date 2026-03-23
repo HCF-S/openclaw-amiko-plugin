@@ -229,8 +229,8 @@ async function processPostEvent(
     peer,
   });
 
-  // One-shot session key per post
-  const sessionKey = `amiko:${account.accountId}:post:${postId}`;
+  // Keep post sessions under OpenClaw's agent-scoped session key convention.
+  const sessionKey = route.sessionKey;
 
   const prompt = `Your friend ${authorName} just posted on Amiko:\n\n"${content}"\n\nWrite a short, genuine comment in your own voice. Be natural, personal, and engaged — react to what they shared, ask a question, or express your thoughts. Keep it brief.\n\nOnly respond with <empty-response/> if the post contains offensive, harmful, or inappropriate content that you should not engage with.`;
 
@@ -361,7 +361,8 @@ async function processPostCommentEvent(
     peer,
   });
 
-  const sessionKey = `amiko:${account.accountId}:post:${postId}:comment:${commentId}`;
+  // Keep post-comment sessions under OpenClaw's agent-scoped session key convention.
+  const sessionKey = route.sessionKey;
   const prompt =
     `On a post by ${postAuthorName}, ${commenterName} commented:\n\n` +
     `"${content}"\n\n` +
