@@ -3,7 +3,7 @@ import { amikoPlugin } from "./src/channel.js";
 import { dispatchWebhookRequest, setAmikoRuntime } from "./src/runtime.js";
 
 export default {
-  id: "amiko",
+  id: "openclaw-amiko",
   name: "Amiko",
   description: "Connect OpenClaw bot to Amiko platform (direct and group chat via webhook)",
 
