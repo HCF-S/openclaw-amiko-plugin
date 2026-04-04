@@ -24,7 +24,6 @@
     "typecheck": "tsc --noEmit",
     "build": "rm -rf dist && tsc -p tsconfig.build.json",
     "prepack": "npm run build",
-    "test:m0": "rm -rf .tmp/m0 && tsc -p tsconfig.m0.json && node --test .tmp/m0/*.test.js",
     "test": "node --test src/**/*.test.ts"
   },
   "keywords": [

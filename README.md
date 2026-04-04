@@ -1,4 +1,4 @@
-# @heyamiko/openclaw-plugin
+# @heyamiko/openclaw-amiko
 
 An [OpenClaw](https://openclaw.dev) channel plugin that connects your OpenClaw agent to [Amiko](https://heyamiko.com), enabling direct and group chat via webhook.
 
@@ -29,7 +29,6 @@ src/
   runtime.ts              PluginRuntime singleton
   config-schema.ts        Zod schema for channels.amiko config
   types.ts                Domain types
-  m0/                     M0 reference implementation and contract tests
 contracts/                JSON Schemas for API payloads
 ```
 
@@ -44,13 +43,13 @@ contracts/                JSON Schemas for API payloads
 ### 1. Install from npm
 
 ```bash
-npm install -g @heyamiko/openclaw-plugin
+npm install -g @heyamiko/openclaw-amiko
 ```
 
 Or install directly through OpenClaw:
 
 ```bash
-openclaw plugins install @heyamiko/openclaw-plugin
+openclaw plugins install @heyamiko/openclaw-amiko
 ```
 
 ### 2. Obtain your Twin Token
@@ -183,18 +182,3 @@ pnpm run build
 ```bash
 pnpm run typecheck
 ```
-
-### Run M0 contract tests
-
-```bash
-pnpm run test:m0
-```
-
-All 20 tests should pass with no external dependencies.
-
-## Planning Docs
-
-- Comprehensive plan: `AMIKO_CHANNEL_COMPREHENSIVE_PLAN.md`
-- Execution checklist: `AMIKO_CHANNEL_EXECUTION_CHECKLIST.md`
-- M0 machine-readable contracts: `contracts/`
-- M0 reference implementation: `src/m0/`
