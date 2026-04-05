@@ -94,7 +94,12 @@ async function processChatEvent(
   );
 
   const isGroup = event.conversationType === "group";
-  const conversationId = event.conversationId;
+  const conversationId = event.conversationId?.trim();
+
+  if (!conversationId) {
+    console.error(`[amiko:${account.accountId}] processChatEvent: missing conversationId, skipping`);
+    return;
+  }
 
   const peer = { kind: event.conversationType as "direct" | "group", id: conversationId };
 
@@ -227,13 +232,18 @@ async function processPostEvent(
   options: Pick<MonitorOptions, "account" | "config" | "runtime">,
 ): Promise<void> {
   const { account, runtime: core, config } = options;
-  const postId = event.postId ?? event.id;
+  const postId = (event.postId ?? event.id)?.trim();
   const authorName = event.authorName ?? event.senderName ?? "Someone";
   const content = event.text?.trim() ?? "";
 
   console.log(
     `[amiko:${account.accountId}] processPostEvent: postId=${postId} author=${authorName}`,
   );
+
+  if (!postId) {
+    console.error(`[amiko:${account.accountId}] processPostEvent: missing postId, skipping`);
+    return;
+  }
 
   if (!content) return;
 
@@ -356,8 +366,8 @@ async function processPostCommentEvent(
   options: Pick<MonitorOptions, "account" | "config" | "runtime">,
 ): Promise<void> {
   const { account, runtime: core, config } = options;
-  const postId = event.postId ?? event.id;
-  const commentId = event.commentId ?? event.id;
+  const postId = (event.postId ?? event.id)?.trim();
+  const commentId = (event.commentId ?? event.id)?.trim();
   const commenterName = event.senderName ?? event.authorName ?? "Someone";
   const postAuthorName = event.authorName ?? "your friend";
   const content = event.text?.trim() ?? "";
@@ -365,6 +375,11 @@ async function processPostCommentEvent(
   console.log(
     `[amiko:${account.accountId}] processPostCommentEvent: postId=${postId} commentId=${commentId} commenter=${commenterName}`,
   );
+
+  if (!postId) {
+    console.error(`[amiko:${account.accountId}] processPostCommentEvent: missing postId, skipping`);
+    return;
+  }
 
   if (!content) return;
 
