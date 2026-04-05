@@ -19,6 +19,19 @@ export type MonitorHandle = {
   handler: (req: any, res: any) => Promise<void>;
 };
 
+/**
+ * Build a per-conversation session key that does not depend on the global
+ * `session.dmScope` setting.  Format mirrors the SDK convention:
+ *
+ *   agent:{agentId}:amiko:{kind}:{conversationId}
+ *
+ * This ensures every Amiko conversation (DM or group) gets its own isolated
+ * session regardless of how the user configures dmScope.
+ */
+function buildAmikoSessionKey(agentId: string, kind: "direct" | "group" | "post", id: string): string {
+  return `agent:${agentId}:amiko:${kind}:${id}`.toLowerCase();
+}
+
 function verifyHmacSignature(secret: string, body: string | Buffer, signature: string): boolean {
   const expected = createHmac("sha256", secret)
     .update(typeof body === "string" ? body : body)
@@ -92,6 +105,9 @@ async function processChatEvent(
     peer,
   });
 
+  const chatKind = isGroup ? "group" as const : "direct" as const;
+  const sessionKey = buildAmikoSessionKey(route.agentId, chatKind, conversationId);
+
   const storePath = core.channel.session.resolveStorePath(
     (config as any).session?.store,
     { agentId: route.agentId },
@@ -106,7 +122,7 @@ async function processChatEvent(
 
   const previousTimestamp = core.channel.session.readSessionUpdatedAt({
     storePath,
-    sessionKey: route.sessionKey,
+    sessionKey,
   });
   const body = core.channel.reply.formatAgentEnvelope({
     channel: "Amiko",
@@ -124,7 +140,7 @@ async function processChatEvent(
     CommandBody: rawBody,
     From: isGroup ? `amiko:group:${conversationId}` : `amiko:${event.senderId}`,
     To: `amiko:${conversationId}`,
-    SessionKey: route.sessionKey,
+    SessionKey: sessionKey,
     AccountId: route.accountId,
     ChatType: isGroup ? "group" : "direct",
     ConversationLabel: fromLabel,
@@ -145,7 +161,7 @@ async function processChatEvent(
 
     await core.channel.session.recordInboundSession({
       storePath,
-      sessionKey: ctxPayload.SessionKey ?? route.sessionKey,
+      sessionKey,
       ctx: ctxPayload,
       onRecordError: (err: unknown) => {
         console.error(`[amiko:${account.accountId}] recordInboundSession error:`, err);
@@ -158,7 +174,7 @@ async function processChatEvent(
 
   await core.channel.session.recordInboundSession({
     storePath,
-    sessionKey: ctxPayload.SessionKey ?? route.sessionKey,
+    sessionKey,
     ctx: ctxPayload,
     onRecordError: (err: unknown) => {
       console.error(`[amiko:${account.accountId}] recordInboundSession error:`, err);
@@ -173,7 +189,7 @@ async function processChatEvent(
   });
 
   console.log(
-    `[amiko:${account.accountId}] dispatching reply: sessionKey=${route.sessionKey} replyMode=${replyMode}`,
+    `[amiko:${account.accountId}] dispatching reply: sessionKey=${sessionKey} replyMode=${replyMode}`,
   );
 
   await core.channel.reply.dispatchReplyWithBufferedBlockDispatcher({
@@ -229,8 +245,7 @@ async function processPostEvent(
     peer,
   });
 
-  // Keep post sessions under OpenClaw's agent-scoped session key convention.
-  const sessionKey = route.sessionKey;
+  const sessionKey = buildAmikoSessionKey(route.agentId, "post", postId);
 
   const prompt = `Your friend ${authorName} just posted on Amiko:\n\n"${content}"\n\nWrite a short, genuine comment in your own voice. Be natural, personal, and engaged — react to what they shared, ask a question, or express your thoughts. Keep it brief.\n\nOnly respond with <empty-response/> if the post contains offensive, harmful, or inappropriate content that you should not engage with.`;
 
@@ -361,8 +376,8 @@ async function processPostCommentEvent(
     peer,
   });
 
-  // Keep post-comment sessions under OpenClaw's agent-scoped session key convention.
-  const sessionKey = route.sessionKey;
+  // Same session as the parent post — all comments on a post share context.
+  const sessionKey = buildAmikoSessionKey(route.agentId, "post", postId);
   const prompt =
     `On a post by ${postAuthorName}, ${commenterName} commented:\n\n` +
     `"${content}"\n\n` +
