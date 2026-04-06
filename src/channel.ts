@@ -94,6 +94,34 @@ export const amikoPlugin = {
     textChunkLimit: 4_000,
     chunkerMode: "markdown" as const,
 
+    resolveTarget({ to }: { to?: string; cfg?: unknown; allowFrom?: string[]; accountId?: string | null; mode?: string }) {
+      const raw = (to ?? "").trim();
+      if (!raw) {
+        return { ok: false as const, error: new Error('Amiko target is required. Use a conversation ID (e.g. "conv-abc123").') };
+      }
+
+      // Strip optional "amiko:" prefix that the agent session context adds.
+      const stripped = raw.replace(/^amiko:/i, "");
+      if (!stripped) {
+        return { ok: false as const, error: new Error(`Invalid Amiko target: "${raw}".`) };
+      }
+
+      // Post targets (amiko:post:xxx) cannot be delivered via the chat API.
+      if (stripped.startsWith("post:") || stripped.startsWith("post.")) {
+        return { ok: false as const, error: new Error(`Post targets are not supported for outbound messages. Got: "${raw}".`) };
+      }
+
+      // What remains should be a bare conversation ID.  Strip a leading
+      // "direct:" or "group:" prefix if the agent included one (mirrors the
+      // session-key kind segment).
+      const conversationId = stripped.replace(/^(direct|group):/, "");
+      if (!conversationId) {
+        return { ok: false as const, error: new Error(`Could not extract conversation ID from target: "${raw}".`) };
+      }
+
+      return { ok: true as const, to: conversationId };
+    },
+
     async sendText({ to, text, account }: { to: string; text: string; account: ResolvedAmikoAccount; cfg: unknown; accountId: string }) {
       return sendTextAmiko(to, text, account);
     },

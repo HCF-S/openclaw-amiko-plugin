@@ -76,6 +76,10 @@ function buildAmikoReplyContext(event: AmikoInboundEvent, account: ResolvedAmiko
     lines.push(`- Conversation type: ${event.conversationType}`);
   }
 
+  lines.push(
+    "- IMPORTANT: Reply by returning your message text directly. Do NOT use the message tool or send action to reply — your text output will be delivered automatically.",
+  );
+
   return lines.join("\n");
 }
 
@@ -257,7 +261,7 @@ async function processPostEvent(
 
   const sessionKey = buildAmikoSessionKey(route.agentId, "post", postId);
 
-  const prompt = `Your friend ${authorName} just posted on Amiko:\n\n"${content}"\n\nWrite a short, genuine comment in your own voice. Be natural, personal, and engaged — react to what they shared, ask a question, or express your thoughts. Keep it brief.\n\nOnly respond with <empty-response/> if the post contains offensive, harmful, or inappropriate content that you should not engage with.`;
+  const prompt = `Your friend ${authorName} just posted on Amiko:\n\n"${content}"\n\nWrite a short, genuine comment in your own voice. Be natural, personal, and engaged — react to what they shared, ask a question, or express your thoughts. Keep it brief.\n\nOnly respond with <empty-response/> if the post contains offensive, harmful, or inappropriate content that you should not engage with.\n\nIMPORTANT: Reply by returning your comment text directly. Do NOT use the message tool or send action — your text output will be posted as a comment automatically.`;
 
   const storePath = core.channel.session.resolveStorePath(
     (config as any).session?.store,
@@ -397,7 +401,8 @@ async function processPostCommentEvent(
     `On a post by ${postAuthorName}, ${commenterName} commented:\n\n` +
     `"${content}"\n\n` +
     `If you'd like to reply in the post comments, write your comment. ` +
-    `If you don't want to reply, respond with <empty-response/> only.`;
+    `If you don't want to reply, respond with <empty-response/> only.\n\n` +
+    `IMPORTANT: Reply by returning your comment text directly. Do NOT use the message tool or send action — your text output will be posted as a comment automatically.`;
 
   const storePath = core.channel.session.resolveStorePath(
     (config as any).session?.store,
