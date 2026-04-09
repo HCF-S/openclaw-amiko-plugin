@@ -34,6 +34,7 @@ export function resolveConfigPath() {
 
 function stripJsonComments(text) {
   return text
+    .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, "")
     .replace(/\/\/.*$/gm, "")
     .replace(/\/\*[\s\S]*?\*\//g, "")
     .replace(/,(\s*[}\]])/g, "$1");

@@ -84,6 +84,21 @@ Removed from the old template:
 - Old/nonexistent APIs such as stats, personality, social, wallets, training, notifications, user info, twins list
 - `voice:generate`, because `amiko-new` no longer exposes that route
 
+## Amiko CLI (credits, wallets, marketplace)
+
+For credits, wallets, marketplace, and financial operations, use the globally installed `amiko` binary:
+
+```bash
+/usr/local/bin/amiko whoami
+/usr/local/bin/amiko credits balance
+/usr/local/bin/amiko wallet
+/usr/local/bin/amiko swap tokens
+/usr/local/bin/amiko browse
+/usr/local/bin/amiko --help
+```
+
+This CLI auto-detects auth from `.amiko.json` in the workspace. Always use the full path `/usr/local/bin/amiko` to avoid conflicts with the skill.
+
 ## Quick Commands
 
 ### Accounts
