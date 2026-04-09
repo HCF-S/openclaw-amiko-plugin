@@ -84,34 +84,41 @@ Removed from the old template:
 - Old/nonexistent APIs such as stats, personality, social, wallets, training, notifications, user info, twins list
 - `voice:generate`, because `amiko-new` no longer exposes that route
 
-## Amiko CLI (credits, wallets, marketplace, search)
+## Amiko CLI — Financial Operations, X Search, Image Gen, Amazon
 
-The global `amiko` binary handles all financial and marketplace operations. It reads auth from the workspace `.amiko.json` file — it does NOT use the skill's `channels.amiko` OpenClaw config.
+The `amiko` CLI handles payments, search, image generation, and marketplace interactions. All services are paid with AMIKO tokens on Solana automatically. Auth is read from `.amiko.json` in the workspace — NOT from the skill's `channels.amiko` config.
 
-> **Important:** Always call the binary by full path (`/usr/local/bin/amiko`) to avoid conflicts with this skill. Before any financial operation, run `/usr/local/bin/amiko whoami` to confirm the active account.
+### When to use the Amiko CLI
+
+Use the CLI when the user asks about:
+- **Wallet addresses** or **balances** → `amiko credits balance`
+- **Top up credits** → `amiko credits topup <amount> --token AMIKO --yes`
+- **Search X/Twitter** → `amiko search "<query>"` (1 AMIKO)
+- **Generate images** → `amiko image "<prompt>"` (5 AMIKO)
+- **Amazon search** → `amiko amazon search "<query>"` (1 AMIKO)
+- **Amazon quote** → `amiko amazon quote <ASIN>` (free)
+- **Swap tokens** → `amiko swap quote <amount> <from> <to>`
+- **Who am I / identity** → `amiko whoami`
+- **Marketplace** → `amiko browse`
+- **Any MPP service** → `amiko service call <METHOD> <path> [body]`
+- **List all services** → `amiko service list`
+
+### Quick Reference
 
 ```bash
-# Verify identity first
-/usr/local/bin/amiko whoami
-
-# Credits & wallets
-/usr/local/bin/amiko credits balance
-/usr/local/bin/amiko credits topup 10000 --token AMIKO --yes
-/usr/local/bin/amiko wallet
-
-# Search X/Twitter (pays with AMIKO tokens)
-/usr/local/bin/amiko search "AI agents"
-
-# Token swaps
-/usr/local/bin/amiko swap quote 0.01 SOL USDC
-/usr/local/bin/amiko swap send 0.01 SOL USDC --wallet <solana-addr> --yes
-
-# Marketplace
-/usr/local/bin/amiko browse
-/usr/local/bin/amiko call <agent> "message"
-
-# Full help
-/usr/local/bin/amiko --help
+amiko whoami                                    # identity + wallets
+amiko credits balance                           # credits + wallet balances
+amiko credits topup 10000 --token AMIKO --yes   # top up credits
+amiko search "AI agents"                        # X search (1 AMIKO)
+amiko image "a sunset over mountains"           # DALL-E image (5 AMIKO)
+amiko amazon search "usb c cable"               # Amazon search (1 AMIKO)
+amiko amazon quote B01GGKYKQM                   # Amazon price quote (free)
+amiko swap quote 0.01 SOL USDC                  # swap quote
+amiko swap send 0.01 SOL USDC --yes             # execute swap
+amiko browse                                    # marketplace
+amiko service list                              # all MPP services + prices
+amiko service call POST /v1/ai/openai/chat '{"message":"hi"}'  # any service
+amiko --help                                    # all commands
 ```
 
 ## Quick Commands
