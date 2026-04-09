@@ -84,34 +84,44 @@ Removed from the old template:
 - Old/nonexistent APIs such as stats, personality, social, wallets, training, notifications, user info, twins list
 - `voice:generate`, because `amiko-new` no longer exposes that route
 
-## Amiko CLI (credits, wallets, marketplace, search)
+## Amiko CLI — Financial Operations & X Search
 
-The global `amiko` binary handles all financial and marketplace operations. It reads auth from the workspace `.amiko.json` file — it does NOT use the skill's `channels.amiko` OpenClaw config.
+The global `amiko` binary at `/usr/local/bin/amiko` handles financial operations, X search, and marketplace interactions. It reads auth from `.amiko.json` in the workspace — NOT from the skill's `channels.amiko` config.
 
-> **Important:** Always call the binary by full path (`/usr/local/bin/amiko`) to avoid conflicts with this skill. Before any financial operation, run `/usr/local/bin/amiko whoami` to confirm the active account.
+> **Always use the full path** `/usr/local/bin/amiko` to avoid conflicts with this skill.
+
+### When to use the Amiko CLI
+
+Use the CLI when the user asks about:
+- **Wallet addresses** or **balances** → `/usr/local/bin/amiko credits balance`
+- **Credit balance** → `/usr/local/bin/amiko credits balance`
+- **Top up credits** → `/usr/local/bin/amiko credits topup <amount> --token AMIKO --yes`
+- **Search X/Twitter** → `/usr/local/bin/amiko search "<query>"` (costs 1 AMIKO token, paid on-chain automatically)
+- **Swap tokens** → `/usr/local/bin/amiko swap quote <amount> <from> <to>`
+- **Who am I / identity** → `/usr/local/bin/amiko whoami`
+- **Marketplace browsing** → `/usr/local/bin/amiko browse`
+
+### X Search
+
+When the user asks to search X, Twitter, or for news/trends, use:
 
 ```bash
-# Verify identity first
-/usr/local/bin/amiko whoami
+/usr/local/bin/amiko search "the query here" 2>&1
+```
 
-# Credits & wallets
-/usr/local/bin/amiko credits balance
-/usr/local/bin/amiko credits topup 10000 --token AMIKO --yes
-/usr/local/bin/amiko wallet
+This automatically pays 1 AMIKO token on-chain via the agent's Solana wallet and returns real-time results from X. No manual payment or auth needed.
 
-# Search X/Twitter (pays with AMIKO tokens)
-/usr/local/bin/amiko search "AI agents"
+### Quick Reference
 
-# Token swaps
-/usr/local/bin/amiko swap quote 0.01 SOL USDC
-/usr/local/bin/amiko swap send 0.01 SOL USDC --wallet <solana-addr> --yes
-
-# Marketplace
-/usr/local/bin/amiko browse
-/usr/local/bin/amiko call <agent> "message"
-
-# Full help
-/usr/local/bin/amiko --help
+```bash
+/usr/local/bin/amiko whoami                          # identity + wallets
+/usr/local/bin/amiko credits balance                 # credits + wallet balances
+/usr/local/bin/amiko credits topup 10000 --token AMIKO --yes  # top up
+/usr/local/bin/amiko search "AI agents"              # X search (1 AMIKO)
+/usr/local/bin/amiko swap quote 0.01 SOL USDC        # swap quote
+/usr/local/bin/amiko swap send 0.01 SOL USDC --wallet <addr> --yes
+/usr/local/bin/amiko browse                          # marketplace
+/usr/local/bin/amiko --help                          # all commands
 ```
 
 ## Quick Commands
