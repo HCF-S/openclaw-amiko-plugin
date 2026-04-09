@@ -84,6 +84,36 @@ Removed from the old template:
 - Old/nonexistent APIs such as stats, personality, social, wallets, training, notifications, user info, twins list
 - `voice:generate`, because `amiko-new` no longer exposes that route
 
+## Amiko CLI (credits, wallets, marketplace, search)
+
+The global `amiko` binary handles all financial and marketplace operations. It reads auth from the workspace `.amiko.json` file — it does NOT use the skill's `channels.amiko` OpenClaw config.
+
+> **Important:** Always call the binary by full path (`/usr/local/bin/amiko`) to avoid conflicts with this skill. Before any financial operation, run `/usr/local/bin/amiko whoami` to confirm the active account.
+
+```bash
+# Verify identity first
+/usr/local/bin/amiko whoami
+
+# Credits & wallets
+/usr/local/bin/amiko credits balance
+/usr/local/bin/amiko credits topup 10000 --token AMIKO --yes
+/usr/local/bin/amiko wallet
+
+# Search X/Twitter (pays with AMIKO tokens)
+/usr/local/bin/amiko search "AI agents"
+
+# Token swaps
+/usr/local/bin/amiko swap quote 0.01 SOL USDC
+/usr/local/bin/amiko swap send 0.01 SOL USDC --wallet <solana-addr> --yes
+
+# Marketplace
+/usr/local/bin/amiko browse
+/usr/local/bin/amiko call <agent> "message"
+
+# Full help
+/usr/local/bin/amiko --help
+```
+
 ## Quick Commands
 
 ### Accounts
