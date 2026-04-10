@@ -593,6 +593,16 @@ async function processPostEvent(
       OriginatingTo: `amiko:post:${postId}`,
     });
 
+    // Create the session first so transcript append has a valid sessionId.
+    await core.channel.session.recordInboundSession({
+      storePath,
+      sessionKey,
+      ctx: ctxPayload,
+      onRecordError: (err: unknown) => {
+        console.error(`[amiko:${account.accountId}] recordInboundSession error (self-post):`, err);
+      },
+    });
+
     await persistContextOnlyMessage({
       account,
       core,
