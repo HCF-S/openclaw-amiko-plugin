@@ -84,9 +84,16 @@ Removed from the old template:
 - Old/nonexistent APIs such as stats, personality, social, wallets, training, notifications, user info, twins list
 - `voice:generate`, because `amiko-new` no longer exposes that route
 
-## Amiko CLI — Financial Operations, X Search, Image Gen, Amazon
+## CRITICAL RULES — Read Before Any CLI Call
 
-The `amiko` CLI handles payments, search, image generation, and marketplace interactions. All services are paid with AMIKO tokens on Solana automatically. Auth is read from `.amiko.json` in the workspace — NOT from the skill's `channels.amiko` config.
+1. **NEVER retry a failed command.** If a command returns an error (400, 401, 402, 404, 500), report the error to the user and STOP. Do not try variations, do not loop. Every paid call costs tokens even if it fails.
+2. **NEVER suggest `amiko login`, `amiko connect`, or generating connection codes.** Auth comes from `.amiko.json` automatically. If auth fails, tell the user to re-init from the Amiko dashboard.
+3. **NEVER use `--task` flag.** Use chat endpoints only.
+4. **Check balance before expensive operations.** Run `amiko credits balance` first if unsure about funds.
+
+## Amiko CLI — Payments, Search, Image, Audio, Marketplace
+
+The `amiko` CLI handles payments, search, image generation, audio, and marketplace interactions. All services are paid with AMIKO tokens on Solana automatically. Auth is read from `.amiko.json` in the workspace — NOT from the skill's `channels.amiko` config.
 
 ### When to use the Amiko CLI
 
@@ -95,6 +102,9 @@ Use the CLI when the user asks about:
 - **Top up credits** → `amiko credits topup <amount> --token AMIKO --yes`
 - **Search X/Twitter** → `amiko search "<query>"` (1 AMIKO)
 - **Generate images** → `amiko image "<prompt>"` (5 AMIKO)
+- **Sound effects** → `amiko service call POST /v1/sfx '{"text":"...","duration_seconds":5}'` ($0.05)
+- **Music generation** → `amiko service call POST /v1/music '{"prompt":"...","music_length_ms":30000}'` ($0.10)
+- **Call marketplace agents** → `amiko call <agent> "message"`
 - **Amazon search** → `amiko amazon search "<query>"` (1 AMIKO)
 - **Amazon quote** → `amiko amazon quote <ASIN>` (free)
 - **Swap tokens** → `amiko swap quote <amount> <from> <to>`
@@ -116,14 +126,18 @@ amiko whoami                                    # identity + wallets
 amiko credits balance                           # credits + wallet balances
 amiko credits topup 10000 --token AMIKO --yes   # top up credits
 amiko search "AI agents"                        # X search (1 AMIKO)
-amiko image "a sunset over mountains"           # DALL-E image (5 AMIKO)
+amiko image "a sunset over mountains"           # image gen (5 AMIKO)
+amiko image "logo" --background transparent     # transparent bg (gpt-image-1)
+amiko call titan-research "summarize AI news"   # call marketplace agent
+amiko service call POST /v1/sfx '{"text":"thunder","duration_seconds":5}'  # SFX ($0.05)
+amiko service call POST /v1/music '{"prompt":"lo-fi beat","music_length_ms":30000}'  # music ($0.10)
+amiko service call POST /v1/ai/openai/chat '{"message":"hi"}'  # any service
 amiko amazon search "usb c cable"               # Amazon search (1 AMIKO)
 amiko amazon quote B01GGKYKQM                   # Amazon price quote (free)
 amiko swap quote 0.01 SOL USDC                  # swap quote
 amiko swap send 0.01 SOL USDC --yes             # execute swap
 amiko browse                                    # marketplace
 amiko service list                              # all MPP services + prices
-amiko service call POST /v1/ai/openai/chat '{"message":"hi"}'  # any service
 amiko --help                                    # all commands
 ```
 
