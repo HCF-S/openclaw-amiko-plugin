@@ -544,9 +544,10 @@ async function processPostEvent(
   const postId = (event.postId ?? event.id)?.trim();
   const authorName = event.authorName ?? event.senderName ?? "Someone";
   const content = event.text?.trim() ?? "";
+  const selfAuthored = event.selfAuthored === true;
 
   console.log(
-    `[amiko:${account.accountId}] processPostEvent: postId=${postId} author=${authorName}`,
+    `[amiko:${account.accountId}] processPostEvent: postId=${postId} author=${authorName} selfAuthored=${selfAuthored}`,
   );
 
   if (!postId) {
@@ -566,12 +567,54 @@ async function processPostEvent(
 
   const sessionKey = buildAmikoSessionKey(route.agentId, "post", postId);
 
-  const prompt = `Your friend ${authorName} just posted on Amiko:\n\n"${content}"\n\nWrite a short, genuine comment in your own voice. Be natural, personal, and engaged — react to what they shared, ask a question, or express your thoughts. Keep it brief.\n\nOnly respond with <empty-response/> if the post contains offensive, harmful, or inappropriate content that you should not engage with.\n\nIMPORTANT: Reply by returning your comment text directly. Do NOT use the message tool or send action — your text output will be posted as a comment automatically.`;
-
   const storePath = core.channel.session.resolveStorePath(
     (config as any).session?.store,
     { agentId: route.agentId },
   );
+
+  // Self-authored post: record as context-only to seed the session, no agent reply.
+  if (selfAuthored) {
+    const contextMessage = `You published a new post on Amiko:\n\n"${content}"`;
+    const ctxPayload = core.channel.reply.finalizeInboundContext({
+      Body: contextMessage,
+      BodyForAgent: contextMessage,
+      RawBody: contextMessage,
+      CommandBody: contextMessage,
+      From: `amiko:post:${postId}`,
+      To: `amiko:${account.accountId}`,
+      SessionKey: sessionKey,
+      AccountId: route.accountId,
+      ChatType: "group",
+      ConversationLabel: `post by ${authorName}`,
+      Provider: "amiko",
+      Surface: "amiko",
+      MessageSid: event.id,
+      OriginatingChannel: "amiko",
+      OriginatingTo: `amiko:post:${postId}`,
+    });
+
+    await persistContextOnlyMessage({
+      account,
+      core,
+      storePath,
+      sessionKey,
+      ctxPayload,
+      rawBody: contextMessage,
+      eventId: event.id,
+      eventTimestamp: event.timestamp,
+      transcriptRole: "assistant",
+      senderName: authorName,
+      senderId: event.authorId ?? event.senderId,
+    });
+
+    console.log(
+      `[amiko:${account.accountId}] self-authored post recorded as context: postId=${postId}`,
+    );
+    return;
+  }
+
+  // Friend's post: agent decides whether to comment.
+  const prompt = `Your friend ${authorName} just posted on Amiko:\n\n"${content}"\n\nWrite a short, genuine comment in your own voice. Be natural, personal, and engaged — react to what they shared, ask a question, or express your thoughts. Keep it brief.\n\nOnly respond with <empty-response/> if the post contains offensive, harmful, or inappropriate content that you should not engage with.\n\nIMPORTANT: Reply by returning your comment text directly. Do NOT use the message tool or send action — your text output will be posted as a comment automatically.`;
 
   const ctxPayload = core.channel.reply.finalizeInboundContext({
     Body: prompt,
@@ -582,7 +625,7 @@ async function processPostEvent(
     To: `amiko:${account.accountId}`,
     SessionKey: sessionKey,
     AccountId: route.accountId,
-    ChatType: "direct",
+    ChatType: "group",
     ConversationLabel: `post by ${authorName}`,
     SenderName: authorName,
     SenderId: event.authorId ?? event.senderId,
@@ -723,7 +766,7 @@ async function processPostCommentEvent(
     To: `amiko:${account.accountId}`,
     SessionKey: sessionKey,
     AccountId: route.accountId,
-    ChatType: "direct",
+    ChatType: "group",
     ConversationLabel: `comment by ${commenterName} on post ${postId}`,
     SenderName: commenterName,
     SenderId: event.senderId,
@@ -860,7 +903,7 @@ async function processCommentModerationEvent(
     To: `amiko:${account.accountId}`,
     SessionKey: sessionKey,
     AccountId: route.accountId,
-    ChatType: "direct",
+    ChatType: "group",
     ConversationLabel: `comment ${decision} on post ${postId}`,
     Provider: "amiko",
     Surface: "amiko",

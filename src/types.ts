@@ -67,6 +67,7 @@ export type AmikoInboundEvent = {
   authorName?: string;
   authorHandle?: string;
   mediaUrls?: string[];
+  selfAuthored?: boolean;
 };
 
 export type AmikoWebhookPayload = {
