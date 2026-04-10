@@ -279,6 +279,7 @@ async function appendContextMessageToTranscript(params: {
       role: transcriptRole,
       content: [{ type: "text", text }],
       timestamp: eventTimestamp,
+      metadata: { source: transcriptRole === "assistant" ? "owner" : "peer", channel: "amiko" },
       ...(idempotencyKey ? { idempotencyKey } : {}),
       ...(transcriptRole === "assistant"
         ? {
