@@ -186,8 +186,10 @@ async function appendContextMessageToTranscript(params: {
   eventTimestamp: number;
   transcriptRole: "user" | "assistant";
   rawBody: string;
+  senderName?: string;
+  senderId?: string;
 }): Promise<void> {
-  const { account, storePath, sessionKey, eventId, eventTimestamp, transcriptRole, rawBody } = params;
+  const { account, storePath, sessionKey, eventId, eventTimestamp, transcriptRole, rawBody, senderName, senderId } = params;
 
   let storeRaw: string;
   try {
@@ -218,7 +220,25 @@ async function appendContextMessageToTranscript(params: {
 
   const sessionFile = sessionEntry?.sessionFile?.trim()
     || path.join(path.dirname(storePath), `${sessionId}.jsonl`);
-  const text = rawBody || "[non-text message]";
+  // Build sender metadata blocks matching SDK format so the UI can identify the sender.
+  const metadataBlocks: string[] = [];
+  if (senderName || senderId) {
+    const senderLabel = senderName
+      ? (senderId ? `${senderName} (${senderId})` : senderName)
+      : senderId!;
+    const senderInfo: Record<string, string | undefined> = {
+      label: senderLabel,
+      id: senderId,
+      name: senderName,
+    };
+    metadataBlocks.push(
+      `Sender (untrusted metadata):\n\`\`\`json\n${JSON.stringify(senderInfo, null, 2)}\n\`\`\``,
+    );
+  }
+  const bodyText = rawBody || "[non-text message]";
+  const text = metadataBlocks.length > 0
+    ? `${metadataBlocks.join("\n\n")}\n\n${bodyText}`
+    : bodyText;
   const idempotencyKey = eventId?.trim() ? `amiko:${eventId.trim()}` : undefined;
 
   let rawTranscript = "";
@@ -305,8 +325,10 @@ async function persistContextOnlyMessage(params: {
   eventId?: string;
   eventTimestamp: number;
   transcriptRole: "user" | "assistant";
+  senderName?: string;
+  senderId?: string;
 }): Promise<void> {
-  const { account, core, storePath, sessionKey, ctxPayload, rawBody, eventId, eventTimestamp, transcriptRole } = params;
+  const { account, core, storePath, sessionKey, ctxPayload, rawBody, eventId, eventTimestamp, transcriptRole, senderName, senderId } = params;
 
   await core.channel.session.recordInboundSession({
     storePath,
@@ -324,6 +346,8 @@ async function persistContextOnlyMessage(params: {
     eventTimestamp,
     transcriptRole,
     rawBody,
+    senderName,
+    senderId,
   });
 }
 
@@ -423,6 +447,8 @@ async function processChatEvent(
       eventId: event.id,
       eventTimestamp: event.timestamp,
       transcriptRole,
+      senderName: event.senderName,
+      senderId: event.senderId,
     });
     return;
   }
