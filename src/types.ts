@@ -33,6 +33,8 @@ export type AmikoEventType =
   | "message.image"
   | "post.published"
   | "post.comment"
+  | "comment.approved"
+  | "comment.rejected"
   | "participant.added";
 
 export type AmikoInboundEvent = {

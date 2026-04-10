@@ -810,6 +810,84 @@ async function processPostCommentEvent(
   });
 }
 
+// ── Comment moderation processing ──────────────────────────────────────────
+
+async function processCommentModerationEvent(
+  event: AmikoInboundEvent,
+  options: Pick<MonitorOptions, "account" | "config" | "runtime">,
+): Promise<void> {
+  const { account, runtime: core, config } = options;
+  const postId = event.postId?.trim();
+  const commentId = event.commentId?.trim();
+  const decision = event.type === "comment.approved" ? "approved" : "rejected";
+
+  console.log(
+    `[amiko:${account.accountId}] processCommentModerationEvent: postId=${postId} commentId=${commentId} decision=${decision}`,
+  );
+
+  if (!postId || !commentId) {
+    console.error(`[amiko:${account.accountId}] comment moderation: missing postId or commentId, skipping`);
+    return;
+  }
+
+  const peer = { kind: "direct" as const, id: `post:${postId}` };
+  const route = core.channel.routing.resolveAgentRoute({
+    cfg: config,
+    channel: "amiko",
+    accountId: account.accountId,
+    peer,
+  });
+
+  // Same session as the parent post — moderation results share context.
+  const sessionKey = buildAmikoSessionKey(route.agentId, "post", postId);
+
+  const storePath = core.channel.session.resolveStorePath(
+    (config as any).session?.store,
+    { agentId: route.agentId },
+  );
+
+  const commentPreview = event.text?.trim().slice(0, 200) ?? "";
+  const contextMessage = decision === "approved"
+    ? `Your draft comment on post ${postId} was approved and published:\n"${commentPreview}"`
+    : `Your draft comment on post ${postId} was rejected by the owner:\n"${commentPreview}"`;
+
+  const ctxPayload = core.channel.reply.finalizeInboundContext({
+    Body: contextMessage,
+    BodyForAgent: contextMessage,
+    RawBody: contextMessage,
+    CommandBody: contextMessage,
+    From: `amiko:post:${postId}:moderation`,
+    To: `amiko:${account.accountId}`,
+    SessionKey: sessionKey,
+    AccountId: route.accountId,
+    ChatType: "direct",
+    ConversationLabel: `comment ${decision} on post ${postId}`,
+    Provider: "amiko",
+    Surface: "amiko",
+    MessageSid: event.id,
+    OriginatingChannel: "amiko",
+    OriginatingTo: `amiko:post:${postId}`,
+  });
+
+  await persistContextOnlyMessage({
+    account,
+    core,
+    storePath,
+    sessionKey,
+    ctxPayload,
+    rawBody: contextMessage,
+    eventId: event.id,
+    eventTimestamp: event.timestamp,
+    transcriptRole: "user",
+    senderName: "System",
+    senderId: undefined,
+  });
+
+  console.log(
+    `[amiko:${account.accountId}] comment moderation recorded: ${decision} commentId=${commentId}`,
+  );
+}
+
 // ── Event dispatcher ────────────────────────────────────────────────────────
 
 async function processEvent(
@@ -822,6 +900,10 @@ async function processEvent(
 
   if (event.type === "post.comment") {
     return processPostCommentEvent(event, options);
+  }
+
+  if (event.type === "comment.approved" || event.type === "comment.rejected") {
+    return processCommentModerationEvent(event, options);
   }
 
   if (event.type === "message.text" || event.type === "message.image") {
