@@ -419,7 +419,7 @@ async function processChatEvent(
       storePath,
       sessionKey,
       ctxPayload,
-      rawBody,
+      rawBody: body,
       eventId: event.id,
       eventTimestamp: event.timestamp,
       transcriptRole,
