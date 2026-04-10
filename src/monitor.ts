@@ -44,12 +44,31 @@ function verifyHmacSignature(secret: string, body: string | Buffer, signature: s
   return timingSafeEqual(expectedBuf, actualBuf);
 }
 
-function buildAmikoReplyContext(event: AmikoInboundEvent, account: ResolvedAmikoAccount): string {
+function buildAmikoSessionSystemPrompt(
+  account: ResolvedAmikoAccount,
+  event: Pick<AmikoInboundEvent, "ownerId" | "conversationType">,
+): string {
+  const lines = [
+    "Amiko channel context:",
+    `- Channel account: ${account.accountId}`,
+    `- Twin ID: ${account.twinId}`,
+  ];
+  if (event.ownerId) {
+    lines.push(`- Owner ID: ${event.ownerId}`);
+  }
+  if (event.conversationType) {
+    lines.push(`- Conversation type: ${event.conversationType}`);
+  }
+  lines.push(
+    "- IMPORTANT: Reply by returning your message text directly. Do NOT use the message tool or send action to reply — your text output will be delivered automatically.",
+  );
+  return lines.join("\n");
+}
+
+function buildAmikoReplyContext(event: AmikoInboundEvent): string {
   const replyMode = event.replyMode ?? "as_owner";
   const lines = [
     "Amiko reply context:",
-    `- Channel account: ${account.accountId}`,
-    `- Twin ID: ${account.twinId}`,
     `- Reply mode: ${replyMode}`,
   ];
 
@@ -58,9 +77,6 @@ function buildAmikoReplyContext(event: AmikoInboundEvent, account: ResolvedAmiko
       `- You are replying on behalf of the owner${event.ownerName ? `, ${event.ownerName}` : ""}.`,
       `- Write as the owner in first person. Do not describe yourself as an AI, assistant, or proxy unless the owner explicitly wants that.`,
     );
-    if (event.ownerId) {
-      lines.push(`- Owner ID: ${event.ownerId}`);
-    }
     if (event.sharedAccountPrompt?.trim()) {
       lines.push(`- Shared account prompt: ${event.sharedAccountPrompt.trim()}`);
     }
@@ -74,13 +90,6 @@ function buildAmikoReplyContext(event: AmikoInboundEvent, account: ResolvedAmiko
   if (event.senderName || event.senderId) {
     lines.push(`- Incoming sender: ${event.senderName || event.senderId}`);
   }
-  if (event.conversationType) {
-    lines.push(`- Conversation type: ${event.conversationType}`);
-  }
-
-  lines.push(
-    "- IMPORTANT: Reply by returning your message text directly. Do NOT use the message tool or send action to reply — your text output will be delivered automatically.",
-  );
 
   return lines.join("\n");
 }
@@ -392,7 +401,8 @@ async function processChatEvent(
   );
 
   const rawBody = event.text?.trim() ?? "";
-  const roleContext = buildAmikoReplyContext(event, account);
+  const sessionSystemPrompt = buildAmikoSessionSystemPrompt(account, event);
+  const roleContext = buildAmikoReplyContext(event);
   const agentBody = `${roleContext}\n\nIncoming message:\n${rawBody}`.trim();
   const fromLabel = isGroup
     ? `group:${conversationId}`
@@ -422,6 +432,7 @@ async function processChatEvent(
     AccountId: route.accountId,
     ChatType: isGroup ? "group" : "direct",
     ConversationLabel: fromLabel,
+    GroupSystemPrompt: sessionSystemPrompt,
     SenderName: event.senderName || undefined,
     SenderId: event.senderId,
     Provider: "amiko",
