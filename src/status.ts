@@ -63,6 +63,7 @@ export function inspectAmikoAccount(account: ResolvedAmikoAccount): Record<strin
     twinId: account.twinId,
     name: account.name,
     enabled: account.enabled,
+    configured: Boolean(account.token?.trim()),
     hasToken: Boolean(account.token?.trim()),
     platformApiBaseUrl: account.platformApiBaseUrl,
     chatApiBaseUrl: account.chatApiBaseUrl,
