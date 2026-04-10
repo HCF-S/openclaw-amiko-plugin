@@ -624,7 +624,7 @@ async function processPostEvent(
   }
 
   // Friend's post: agent decides whether to comment.
-  const prompt = `Your friend ${authorName} just posted on Amiko:\n\n"${content}"\n\nWrite a short, genuine comment in your own voice. Be natural, personal, and engaged — react to what they shared, ask a question, or express your thoughts. Keep it brief.\n\nOnly respond with <empty-response/> if the post contains offensive, harmful, or inappropriate content that you should not engage with.\n\nIMPORTANT: Reply by returning your comment text directly. Do NOT use the message tool or send action — your text output will be posted as a comment automatically.`;
+  const prompt = `Your friend ${authorName} just posted on Amiko:\n\n"${content}"\n\nWrite a short, genuine comment in your own voice. Be natural, personal, and engaged — react to what they shared, ask a question, or express your thoughts. Keep it brief. Reply in the same language as the original post.\n\nOnly respond with <empty-response/> if the post contains offensive, harmful, or inappropriate content that you should not engage with.\n\nIMPORTANT: Reply by returning your comment text directly. Do NOT use the message tool or send action — your text output will be posted as a comment automatically.`;
 
   const ctxPayload = core.channel.reply.finalizeInboundContext({
     Body: prompt,
@@ -731,7 +731,6 @@ async function processPostCommentEvent(
   const postId = (event.postId ?? event.id)?.trim();
   const commentId = (event.commentId ?? event.id)?.trim();
   const commenterName = event.senderName ?? event.authorName ?? "Someone";
-  const postAuthorName = event.authorName ?? "your friend";
   const content = event.text?.trim() ?? "";
 
   console.log(
@@ -745,7 +744,7 @@ async function processPostCommentEvent(
 
   if (!content) return;
 
-  const peer = { kind: "direct" as const, id: `post:${postId}:comment:${commentId}` };
+  const peer = { kind: "direct" as const, id: `post:${postId}` };
   const route = core.channel.routing.resolveAgentRoute({
     cfg: config,
     channel: "amiko",
@@ -755,12 +754,7 @@ async function processPostCommentEvent(
 
   // Same session as the parent post — all comments on a post share context.
   const sessionKey = buildAmikoSessionKey(route.agentId, "post", postId);
-  const prompt =
-    `On a post by ${postAuthorName}, ${commenterName} commented:\n\n` +
-    `"${content}"\n\n` +
-    `If you'd like to reply in the post comments, write your comment. ` +
-    `If you don't want to reply, respond with <empty-response/> only.\n\n` +
-    `IMPORTANT: Reply by returning your comment text directly. Do NOT use the message tool or send action — your text output will be posted as a comment automatically.`;
+  const contextMessage = `${commenterName} commented on the post:\n\n"${content}"`;
 
   const storePath = core.channel.session.resolveStorePath(
     (config as any).session?.store,
@@ -768,18 +762,16 @@ async function processPostCommentEvent(
   );
 
   const ctxPayload = core.channel.reply.finalizeInboundContext({
-    Body: prompt,
-    BodyForAgent: prompt,
-    RawBody: prompt,
-    CommandBody: prompt,
+    Body: contextMessage,
+    BodyForAgent: contextMessage,
+    RawBody: contextMessage,
+    CommandBody: contextMessage,
     From: `amiko:post:${postId}:comment:${commentId}`,
     To: `amiko:${account.accountId}`,
     SessionKey: sessionKey,
     AccountId: route.accountId,
     ChatType: "group",
     ConversationLabel: `comment by ${commenterName} on post ${postId}`,
-    SenderName: commenterName,
-    SenderId: event.senderId,
     Provider: "amiko",
     Surface: "amiko",
     MessageSid: event.id,
@@ -787,6 +779,7 @@ async function processPostCommentEvent(
     OriginatingTo: `amiko:post:${postId}:comment:${commentId}`,
   });
 
+  // Record as context-only — no agent reply for now.
   await core.channel.session.recordInboundSession({
     storePath,
     sessionKey,
@@ -796,71 +789,23 @@ async function processPostCommentEvent(
     },
   });
 
-  const { onModelSelected, ...prefixOptions } = createReplyPrefixOptions({
-    cfg: config,
-    agentId: route.agentId,
-    channel: "amiko",
-    accountId: account.accountId,
+  await persistContextOnlyMessage({
+    account,
+    core,
+    storePath,
+    sessionKey,
+    ctxPayload,
+    rawBody: contextMessage,
+    eventId: event.id,
+    eventTimestamp: event.timestamp,
+    transcriptRole: "user",
+    senderName: commenterName,
+    senderId: event.senderId,
   });
 
   console.log(
-    `[amiko:${account.accountId}] dispatching post-comment reply: sessionKey=${sessionKey}`,
+    `[amiko:${account.accountId}] post-comment recorded as context: postId=${postId} commentId=${commentId}`,
   );
-
-  await core.channel.reply.dispatchReplyWithBufferedBlockDispatcher({
-    ctx: ctxPayload,
-    cfg: config,
-    dispatcherOptions: {
-      ...prefixOptions,
-      deliver: async (payload: { text?: string }) => {
-        if (!payload.text) return;
-
-        const text = payload.text.trim();
-        if (text === "<empty-response/>" || text.includes("<empty-response/>")) {
-          console.log(
-            `[amiko:${account.accountId}] agent skipped post-comment reply for ${postId}/${commentId}`,
-          );
-          return;
-        }
-
-        const commentUrl = `${account.platformApiBaseUrl}/api/posts/${postId}/comments`;
-        console.log(
-          `[amiko:${account.accountId}] posting reply comment on ${postId} for comment ${commentId}: ${text.slice(0, 100)}`,
-        );
-
-        try {
-          const res = await fetch(commentUrl, {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${account.token}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({ comment: text }),
-          });
-
-          if (!res.ok) {
-            const errText = await res.text().catch(() => "");
-            console.error(
-              `[amiko:${account.accountId}] reply comment POST failed: ${res.status} ${errText.slice(0, 200)}`,
-            );
-          } else {
-            const data = (await res.json()) as { comment?: { id?: string } };
-            console.log(
-              `[amiko:${account.accountId}] reply comment posted ok: ${data.comment?.id ?? "unknown"}`,
-            );
-          }
-        } catch (err) {
-          console.error(`[amiko:${account.accountId}] reply comment POST error:`, err);
-        }
-      },
-      onError: (err: unknown, info: { kind: string }) => {
-        console.error(`[amiko:${account.accountId}] ${info.kind} post-comment reply error:`, err);
-      },
-    },
-    replyOptions: {
-      onModelSelected,
-    },
-  });
 }
 
 // ── Comment moderation processing ──────────────────────────────────────────
