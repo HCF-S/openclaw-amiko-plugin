@@ -52,9 +52,11 @@ export type AmikoInboundEvent = {
   // Channel integration fields
   replyMode?: "as_owner" | "as_agent";
   replyExpected?: boolean;
+  senderIsAgent?: boolean;
   ownerId?: string;
   ownerName?: string;
   sharedAccountPrompt?: string;
+  transcriptRoleHint?: "user" | "assistant";
 
   // Post fields (for post.published / post.comment events)
   postId?: string;
