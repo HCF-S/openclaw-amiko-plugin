@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node:*)",
+      "Bash(gh pr:*)",
+      "Bash(git checkout:*)",
+      "Bash(git merge:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m ':*)",
+      "Bash(git push:*)",
+      "Bash(pnpm run:*)",
+      "Bash(pnpm publish:*)"
+    ]
+  }
+}
