@@ -430,11 +430,17 @@ async function processChatEvent(
     OriginatingTo: `amiko:${conversationId}`,
   });
 
-  // ── replyExpected: false → persist context only, no agent response ─────────
-  if (!replyExpected) {
-    const transcriptRole = resolveTranscriptRole(event);
+  // ── Detect owner's own messages: always context-only as assistant ──────────
+  const isOwnerMessage =
+    event.ownerId?.trim() &&
+    event.senderId?.trim() &&
+    event.ownerId.trim() === event.senderId.trim();
+
+  // ── replyExpected: false OR owner's own message → persist context only ─────
+  if (!replyExpected || isOwnerMessage) {
+    const transcriptRole = isOwnerMessage ? "assistant" : resolveTranscriptRole(event);
     console.log(
-      `[amiko:${account.accountId}] recording context only (no reply): role=${transcriptRole} ${rawBody.slice(0, 100)}`,
+      `[amiko:${account.accountId}] recording context only (no reply): role=${transcriptRole} isOwner=${!!isOwnerMessage} ${rawBody.slice(0, 100)}`,
     );
 
     await persistContextOnlyMessage({
