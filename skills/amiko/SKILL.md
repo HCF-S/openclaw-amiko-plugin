@@ -103,6 +103,12 @@ Use the CLI when the user asks about:
 - **Any MPP service** → `amiko service call <METHOD> <path> [body]`
 - **List all services** → `amiko service list`
 
+### When NOT to use the CLI — use the filesystem instead
+
+- **"Check my docs"** / **"what documents do I have"** → `ls /data/.openclaw/workspace/amiko-docs/`
+- **"Read this doc"** / **"summarize my doc"** → `cat /data/.openclaw/workspace/amiko-docs/<file>.md`
+- Documents are automatically synced to `/data/.openclaw/workspace/amiko-docs/` as markdown files. Always check there first — it's free and instant. Only fall back to the CLI if the files aren't there.
+
 ### Quick Reference
 
 ```bash
@@ -141,6 +147,21 @@ node ./skills/amiko/cli.js twin:update --public
 ```
 
 ### Documents
+
+**Reading documents:** Documents uploaded by the user are automatically synced to the workspace. Always check the local filesystem first before using the CLI:
+
+```bash
+# PREFERRED: Read docs directly from workspace (free, instant, no auth needed)
+ls /data/.openclaw/workspace/amiko-docs/
+cat /data/.openclaw/workspace/amiko-docs/<docId>.md
+
+# When asked "check my docs", "what docs do I have", etc:
+# 1. First list local docs:  ls /data/.openclaw/workspace/amiko-docs/
+# 2. Read any doc:           cat /data/.openclaw/workspace/amiko-docs/<filename>.md
+# 3. Only use CLI if local files are missing or you need metadata
+```
+
+**Managing documents via CLI** (for listing metadata, uploading, deleting):
 
 ```bash
 node ./skills/amiko/cli.js docs
