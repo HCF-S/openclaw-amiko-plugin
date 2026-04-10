@@ -30,7 +30,7 @@ export type PluginRuntime = {
         peer: { kind: "direct" | "group"; id: string };
       }): AgentRoute;
     };
-    chat: {
+    chat?: {
       /** Inject a message into a session transcript without triggering agent inference. */
       inject(params: {
         sessionKey: string;

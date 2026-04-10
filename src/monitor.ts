@@ -1,4 +1,6 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { randomUUID, createHmac, timingSafeEqual } from "node:crypto";
+import fs from "node:fs/promises";
+import path from "node:path";
 import type { ResolvedAmikoAccount, AmikoInboundEvent, AmikoWebhookPayload } from "./types.js";
 import type { PluginRuntime } from "./runtime.js";
 import type { ProbeResult } from "./status.js";
@@ -42,12 +44,31 @@ function verifyHmacSignature(secret: string, body: string | Buffer, signature: s
   return timingSafeEqual(expectedBuf, actualBuf);
 }
 
-function buildAmikoReplyContext(event: AmikoInboundEvent, account: ResolvedAmikoAccount): string {
+function buildAmikoSessionSystemPrompt(
+  account: ResolvedAmikoAccount,
+  event: Pick<AmikoInboundEvent, "ownerId" | "conversationType">,
+): string {
+  const lines = [
+    "Amiko channel context:",
+    `- Channel account: ${account.accountId}`,
+    `- Twin ID: ${account.twinId}`,
+  ];
+  if (event.ownerId) {
+    lines.push(`- Owner ID: ${event.ownerId}`);
+  }
+  if (event.conversationType) {
+    lines.push(`- Conversation type: ${event.conversationType}`);
+  }
+  lines.push(
+    "- IMPORTANT: Reply by returning your message text directly. Do NOT use the message tool or send action to reply — your text output will be delivered automatically.",
+  );
+  return lines.join("\n");
+}
+
+function buildAmikoReplyContext(event: AmikoInboundEvent): string {
   const replyMode = event.replyMode ?? "as_owner";
   const lines = [
     "Amiko reply context:",
-    `- Channel account: ${account.accountId}`,
-    `- Twin ID: ${account.twinId}`,
     `- Reply mode: ${replyMode}`,
   ];
 
@@ -56,9 +77,6 @@ function buildAmikoReplyContext(event: AmikoInboundEvent, account: ResolvedAmiko
       `- You are replying on behalf of the owner${event.ownerName ? `, ${event.ownerName}` : ""}.`,
       `- Write as the owner in first person. Do not describe yourself as an AI, assistant, or proxy unless the owner explicitly wants that.`,
     );
-    if (event.ownerId) {
-      lines.push(`- Owner ID: ${event.ownerId}`);
-    }
     if (event.sharedAccountPrompt?.trim()) {
       lines.push(`- Shared account prompt: ${event.sharedAccountPrompt.trim()}`);
     }
@@ -72,15 +90,282 @@ function buildAmikoReplyContext(event: AmikoInboundEvent, account: ResolvedAmiko
   if (event.senderName || event.senderId) {
     lines.push(`- Incoming sender: ${event.senderName || event.senderId}`);
   }
-  if (event.conversationType) {
-    lines.push(`- Conversation type: ${event.conversationType}`);
+
+  if (event.senderIsAgent) {
+    lines.push(
+      "- NOTE: This message was sent by the other party's AI agent, not a human.",
+      "- To avoid an endless back-and-forth loop between agents, only reply if your response adds genuine value (e.g. answers a question, provides requested info). If the conversation has reached a natural pause or the exchange is purely pleasantries, respond with <empty-response/> to skip.",
+    );
   }
 
-  lines.push(
-    "- IMPORTANT: Reply by returning your message text directly. Do NOT use the message tool or send action to reply — your text output will be delivered automatically.",
-  );
-
   return lines.join("\n");
+}
+
+const SESSION_TRANSCRIPT_VERSION = 3;
+
+type SessionStoreEntry = {
+  sessionId?: string;
+  sessionFile?: string;
+};
+
+function buildTranscriptEntryId(): string {
+  return randomUUID().replace(/-/g, "").slice(0, 8);
+}
+
+function resolveWorkspaceDirFromStorePath(storePath: string): string {
+  const stateDir = path.resolve(path.dirname(storePath), "..", "..", "..");
+  return path.join(stateDir, "workspace");
+}
+
+function buildSessionHeader(sessionId: string, storePath: string): Record<string, unknown> {
+  return {
+    type: "session",
+    version: SESSION_TRANSCRIPT_VERSION,
+    id: sessionId,
+    timestamp: new Date().toISOString(),
+    cwd: resolveWorkspaceDirFromStorePath(storePath),
+  };
+}
+
+function resolveTranscriptRole(event: Pick<
+  AmikoInboundEvent,
+  "transcriptRoleHint" | "replyMode" | "ownerId" | "senderId"
+>): "user" | "assistant" {
+  if (event.transcriptRoleHint === "user" || event.transcriptRoleHint === "assistant") {
+    return event.transcriptRoleHint;
+  }
+
+  if (
+    event.replyMode === "as_owner" &&
+    event.ownerId?.trim() &&
+    event.senderId?.trim() &&
+    event.ownerId.trim() === event.senderId.trim()
+  ) {
+    return "assistant";
+  }
+
+  return "user";
+}
+
+function parseSessionStoreEntry(
+  store: Record<string, SessionStoreEntry>,
+  sessionKey: string,
+): SessionStoreEntry | undefined {
+  const normalizedKey = sessionKey.trim().toLowerCase();
+  if (!normalizedKey) return undefined;
+  if (store[normalizedKey]) return store[normalizedKey];
+  for (const [candidateKey, candidateEntry] of Object.entries(store)) {
+    if (candidateKey.toLowerCase() === normalizedKey) return candidateEntry;
+  }
+  return undefined;
+}
+
+function readTranscriptState(rawTranscript: string, idempotencyKey?: string): {
+  hasIdempotencyKey: boolean;
+  lastEntryId?: string;
+} {
+  let lastEntryId: string | undefined;
+  let hasIdempotencyKey = false;
+
+  for (const line of rawTranscript.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+
+    try {
+      const entry = JSON.parse(trimmed) as {
+        id?: unknown;
+        message?: { idempotencyKey?: unknown };
+      };
+      if (typeof entry.id === "string" && entry.id.trim()) {
+        lastEntryId = entry.id;
+      }
+      if (
+        idempotencyKey &&
+        typeof entry.message?.idempotencyKey === "string" &&
+        entry.message.idempotencyKey === idempotencyKey
+      ) {
+        hasIdempotencyKey = true;
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  return { hasIdempotencyKey, lastEntryId };
+}
+
+async function appendContextMessageToTranscript(params: {
+  account: ResolvedAmikoAccount;
+  storePath: string;
+  sessionKey: string;
+  eventId?: string;
+  eventTimestamp: number;
+  transcriptRole: "user" | "assistant";
+  rawBody: string;
+  senderName?: string;
+  senderId?: string;
+}): Promise<void> {
+  const { account, storePath, sessionKey, eventId, eventTimestamp, transcriptRole, rawBody, senderName, senderId } = params;
+
+  let storeRaw: string;
+  try {
+    storeRaw = await fs.readFile(storePath, "utf8");
+  } catch (err) {
+    console.error(`[amiko:${account.accountId}] failed to read session store for transcript append:`, err);
+    return;
+  }
+
+  let store: Record<string, SessionStoreEntry>;
+  try {
+    const parsed = JSON.parse(storeRaw) as Record<string, SessionStoreEntry>;
+    store = parsed && typeof parsed === "object" ? parsed : {};
+  } catch (err) {
+    console.error(`[amiko:${account.accountId}] failed to parse session store for transcript append:`, err);
+    return;
+  }
+
+  const sessionEntry = parseSessionStoreEntry(store, sessionKey);
+  const sessionId = sessionEntry?.sessionId?.trim();
+
+  if (!sessionId) {
+    console.warn(
+      `[amiko:${account.accountId}] transcript append skipped: missing sessionId for ${sessionKey}`,
+    );
+    return;
+  }
+
+  const sessionFile = sessionEntry?.sessionFile?.trim()
+    || path.join(path.dirname(storePath), `${sessionId}.jsonl`);
+  // Build sender metadata blocks matching SDK format so the UI can identify the sender.
+  const metadataBlocks: string[] = [];
+  if (senderName || senderId) {
+    const senderLabel = senderName
+      ? (senderId ? `${senderName} (${senderId})` : senderName)
+      : senderId!;
+    const senderInfo: Record<string, string | undefined> = {
+      label: senderLabel,
+      id: senderId,
+      name: senderName,
+    };
+    metadataBlocks.push(
+      `Sender (untrusted metadata):\n\`\`\`json\n${JSON.stringify(senderInfo, null, 2)}\n\`\`\``,
+    );
+  }
+  const bodyText = rawBody || "[non-text message]";
+  const text = metadataBlocks.length > 0
+    ? `${metadataBlocks.join("\n\n")}\n\n${bodyText}`
+    : bodyText;
+  const idempotencyKey = eventId?.trim() ? `amiko:${eventId.trim()}` : undefined;
+
+  let rawTranscript = "";
+  try {
+    rawTranscript = await fs.readFile(sessionFile, "utf8");
+  } catch (err) {
+    const code = err && typeof err === "object" && "code" in err ? String((err as any).code) : "";
+    if (code !== "ENOENT") {
+      console.error(`[amiko:${account.accountId}] failed to read transcript ${sessionFile}:`, err);
+      return;
+    }
+  }
+
+  const transcriptState = readTranscriptState(rawTranscript, idempotencyKey);
+  if (transcriptState.hasIdempotencyKey) {
+    console.log(
+      `[amiko:${account.accountId}] transcript append deduped: sessionKey=${sessionKey} eventId=${eventId ?? "unknown"}`,
+    );
+    return;
+  }
+
+  if (!rawTranscript) {
+    await fs.mkdir(path.dirname(sessionFile), { recursive: true });
+    await fs.writeFile(
+      sessionFile,
+      `${JSON.stringify(buildSessionHeader(sessionId, storePath))}\n`,
+      { encoding: "utf8", mode: 0o600 },
+    );
+    rawTranscript = "";
+  }
+
+  const entry = {
+    type: "message",
+    id: buildTranscriptEntryId(),
+    parentId: transcriptState.lastEntryId ?? null,
+    timestamp: new Date().toISOString(),
+    message: {
+      role: transcriptRole,
+      content: [{ type: "text", text }],
+      timestamp: eventTimestamp,
+      metadata: { source: transcriptRole === "assistant" ? "owner" : "peer", channel: "amiko" },
+      ...(idempotencyKey ? { idempotencyKey } : {}),
+      ...(transcriptRole === "assistant"
+        ? {
+            api: "openai-responses",
+            provider: "openclaw",
+            model: "amiko-context-mirror",
+            usage: {
+              input: 0,
+              output: 0,
+              cacheRead: 0,
+              cacheWrite: 0,
+              totalTokens: 0,
+              cost: {
+                input: 0,
+                output: 0,
+                cacheRead: 0,
+                cacheWrite: 0,
+                total: 0,
+              },
+            },
+            stopReason: "stop",
+          }
+        : {}),
+    },
+  };
+
+  await fs.appendFile(sessionFile, `${JSON.stringify(entry)}\n`, {
+    encoding: "utf8",
+    mode: 0o600,
+  });
+
+  console.log(
+    `[amiko:${account.accountId}] context appended to transcript: sessionKey=${sessionKey} role=${transcriptRole} sessionFile=${sessionFile}`,
+  );
+}
+
+async function persistContextOnlyMessage(params: {
+  account: ResolvedAmikoAccount;
+  core: PluginRuntime;
+  storePath: string;
+  sessionKey: string;
+  ctxPayload: unknown;
+  rawBody: string;
+  eventId?: string;
+  eventTimestamp: number;
+  transcriptRole: "user" | "assistant";
+  senderName?: string;
+  senderId?: string;
+}): Promise<void> {
+  const { account, core, storePath, sessionKey, ctxPayload, rawBody, eventId, eventTimestamp, transcriptRole, senderName, senderId } = params;
+
+  await core.channel.session.recordInboundSession({
+    storePath,
+    sessionKey,
+    ctx: ctxPayload,
+    onRecordError: (err: unknown) => {
+      console.error(`[amiko:${account.accountId}] recordInboundSession error:`, err);
+    },
+  });
+  await appendContextMessageToTranscript({
+    account,
+    storePath,
+    sessionKey,
+    eventId,
+    eventTimestamp,
+    transcriptRole,
+    rawBody,
+    senderName,
+    senderId,
+  });
 }
 
 // ── Chat message processing ─────────────────────────────────────────────────
@@ -123,7 +408,8 @@ async function processChatEvent(
   );
 
   const rawBody = event.text?.trim() ?? "";
-  const roleContext = buildAmikoReplyContext(event, account);
+  const sessionSystemPrompt = buildAmikoSessionSystemPrompt(account, event);
+  const roleContext = buildAmikoReplyContext(event);
   const agentBody = `${roleContext}\n\nIncoming message:\n${rawBody}`.trim();
   const fromLabel = isGroup
     ? `group:${conversationId}`
@@ -153,6 +439,7 @@ async function processChatEvent(
     AccountId: route.accountId,
     ChatType: isGroup ? "group" : "direct",
     ConversationLabel: fromLabel,
+    GroupSystemPrompt: sessionSystemPrompt,
     SenderName: event.senderName || undefined,
     SenderId: event.senderId,
     Provider: "amiko",
@@ -162,19 +449,31 @@ async function processChatEvent(
     OriginatingTo: `amiko:${conversationId}`,
   });
 
-  // ── replyExpected: false → persist context only, no agent response ─────────
-  if (!replyExpected) {
+  // ── Detect owner's own messages: always context-only as assistant ──────────
+  const isOwnerMessage =
+    event.ownerId?.trim() &&
+    event.senderId?.trim() &&
+    event.ownerId.trim() === event.senderId.trim();
+
+  // ── replyExpected: false OR owner's own message → persist context only ─────
+  if (!replyExpected || isOwnerMessage) {
+    const transcriptRole = isOwnerMessage ? "assistant" : resolveTranscriptRole(event);
     console.log(
-      `[amiko:${account.accountId}] recording context only (no reply): ${rawBody.slice(0, 100)}`,
+      `[amiko:${account.accountId}] recording context only (no reply): role=${transcriptRole} isOwner=${!!isOwnerMessage} ${rawBody.slice(0, 100)}`,
     );
 
-    await core.channel.session.recordInboundSession({
+    await persistContextOnlyMessage({
+      account,
+      core,
       storePath,
       sessionKey,
-      ctx: ctxPayload,
-      onRecordError: (err: unknown) => {
-        console.error(`[amiko:${account.accountId}] recordInboundSession error:`, err);
-      },
+      ctxPayload,
+      rawBody: body,
+      eventId: event.id,
+      eventTimestamp: event.timestamp,
+      transcriptRole,
+      senderName: event.senderName,
+      senderId: event.senderId,
     });
     return;
   }
@@ -207,16 +506,22 @@ async function processChatEvent(
     dispatcherOptions: {
       ...prefixOptions,
       deliver: async (payload: { text?: string; mediaUrl?: string }) => {
-        if (payload.text) {
-          console.log(
-            `[amiko:${account.accountId}] delivering reply (${replyMode}) to ${conversationId}: ${payload.text.slice(0, 100)}`,
-          );
-          const result = await sendTextAmiko(conversationId, payload.text, account, { replyMode });
-          if (!result.ok) {
-            console.error(`[amiko:${account.accountId}] sendTextAmiko failed:`, result);
-          } else {
-            console.log(`[amiko:${account.accountId}] reply delivered ok: messageId=${result.messageId}`);
-          }
+        if (!payload.text) return;
+
+        const text = payload.text.trim();
+        if (text === "<empty-response/>" || text.includes("<empty-response/>")) {
+          console.log(`[amiko:${account.accountId}] agent skipped reply for ${conversationId}`);
+          return;
+        }
+
+        console.log(
+          `[amiko:${account.accountId}] delivering reply (${replyMode}) to ${conversationId}: ${text.slice(0, 100)}`,
+        );
+        const result = await sendTextAmiko(conversationId, text, account, { replyMode });
+        if (!result.ok) {
+          console.error(`[amiko:${account.accountId}] sendTextAmiko failed:`, result);
+        } else {
+          console.log(`[amiko:${account.accountId}] reply delivered ok: messageId=${result.messageId}`);
         }
       },
       onError: (err: unknown, info: { kind: string }) => {
@@ -239,9 +544,10 @@ async function processPostEvent(
   const postId = (event.postId ?? event.id)?.trim();
   const authorName = event.authorName ?? event.senderName ?? "Someone";
   const content = event.text?.trim() ?? "";
+  const selfAuthored = event.selfAuthored === true;
 
   console.log(
-    `[amiko:${account.accountId}] processPostEvent: postId=${postId} author=${authorName}`,
+    `[amiko:${account.accountId}] processPostEvent: postId=${postId} author=${authorName} selfAuthored=${selfAuthored}`,
   );
 
   if (!postId) {
@@ -261,12 +567,64 @@ async function processPostEvent(
 
   const sessionKey = buildAmikoSessionKey(route.agentId, "post", postId);
 
-  const prompt = `Your friend ${authorName} just posted on Amiko:\n\n"${content}"\n\nWrite a short, genuine comment in your own voice. Be natural, personal, and engaged — react to what they shared, ask a question, or express your thoughts. Keep it brief.\n\nOnly respond with <empty-response/> if the post contains offensive, harmful, or inappropriate content that you should not engage with.\n\nIMPORTANT: Reply by returning your comment text directly. Do NOT use the message tool or send action — your text output will be posted as a comment automatically.`;
-
   const storePath = core.channel.session.resolveStorePath(
     (config as any).session?.store,
     { agentId: route.agentId },
   );
+
+  // Self-authored post: record as context-only to seed the session, no agent reply.
+  if (selfAuthored) {
+    const contextMessage = `You published a new post on Amiko:\n\n"${content}"`;
+    const ctxPayload = core.channel.reply.finalizeInboundContext({
+      Body: contextMessage,
+      BodyForAgent: contextMessage,
+      RawBody: contextMessage,
+      CommandBody: contextMessage,
+      From: `amiko:post:${postId}`,
+      To: `amiko:${account.accountId}`,
+      SessionKey: sessionKey,
+      AccountId: route.accountId,
+      ChatType: "group",
+      ConversationLabel: `post by ${authorName}`,
+      Provider: "amiko",
+      Surface: "amiko",
+      MessageSid: event.id,
+      OriginatingChannel: "amiko",
+      OriginatingTo: `amiko:post:${postId}`,
+    });
+
+    // Create the session first so transcript append has a valid sessionId.
+    await core.channel.session.recordInboundSession({
+      storePath,
+      sessionKey,
+      ctx: ctxPayload,
+      onRecordError: (err: unknown) => {
+        console.error(`[amiko:${account.accountId}] recordInboundSession error (self-post):`, err);
+      },
+    });
+
+    await persistContextOnlyMessage({
+      account,
+      core,
+      storePath,
+      sessionKey,
+      ctxPayload,
+      rawBody: contextMessage,
+      eventId: event.id,
+      eventTimestamp: event.timestamp,
+      transcriptRole: "assistant",
+      senderName: authorName,
+      senderId: event.authorId ?? event.senderId,
+    });
+
+    console.log(
+      `[amiko:${account.accountId}] self-authored post recorded as context: postId=${postId}`,
+    );
+    return;
+  }
+
+  // Friend's post: agent decides whether to comment.
+  const prompt = `IMPORTANT: You MUST reply in the same language as the original post. If the post is in English, reply in English. If the post is in Chinese, reply in Chinese.\n\nYour friend ${authorName} just posted on Amiko:\n\n"${content}"\n\nWrite a short, genuine comment in your own voice. Be natural, personal, and engaged — react to what they shared, ask a question, or express your thoughts. Keep it brief.\n\nOnly respond with <empty-response/> if the post contains offensive, harmful, or inappropriate content that you should not engage with.\n\nIMPORTANT: Reply by returning your comment text directly. Do NOT use the message tool or send action — your text output will be posted as a comment automatically.`;
 
   const ctxPayload = core.channel.reply.finalizeInboundContext({
     Body: prompt,
@@ -277,7 +635,7 @@ async function processPostEvent(
     To: `amiko:${account.accountId}`,
     SessionKey: sessionKey,
     AccountId: route.accountId,
-    ChatType: "direct",
+    ChatType: "group",
     ConversationLabel: `post by ${authorName}`,
     SenderName: authorName,
     SenderId: event.authorId ?? event.senderId,
@@ -373,7 +731,6 @@ async function processPostCommentEvent(
   const postId = (event.postId ?? event.id)?.trim();
   const commentId = (event.commentId ?? event.id)?.trim();
   const commenterName = event.senderName ?? event.authorName ?? "Someone";
-  const postAuthorName = event.authorName ?? "your friend";
   const content = event.text?.trim() ?? "";
 
   console.log(
@@ -387,7 +744,7 @@ async function processPostCommentEvent(
 
   if (!content) return;
 
-  const peer = { kind: "direct" as const, id: `post:${postId}:comment:${commentId}` };
+  const peer = { kind: "direct" as const, id: `post:${postId}` };
   const route = core.channel.routing.resolveAgentRoute({
     cfg: config,
     channel: "amiko",
@@ -397,12 +754,7 @@ async function processPostCommentEvent(
 
   // Same session as the parent post — all comments on a post share context.
   const sessionKey = buildAmikoSessionKey(route.agentId, "post", postId);
-  const prompt =
-    `On a post by ${postAuthorName}, ${commenterName} commented:\n\n` +
-    `"${content}"\n\n` +
-    `If you'd like to reply in the post comments, write your comment. ` +
-    `If you don't want to reply, respond with <empty-response/> only.\n\n` +
-    `IMPORTANT: Reply by returning your comment text directly. Do NOT use the message tool or send action — your text output will be posted as a comment automatically.`;
+  const contextMessage = `${commenterName} commented on the post:\n\n"${content}"`;
 
   const storePath = core.channel.session.resolveStorePath(
     (config as any).session?.store,
@@ -410,18 +762,16 @@ async function processPostCommentEvent(
   );
 
   const ctxPayload = core.channel.reply.finalizeInboundContext({
-    Body: prompt,
-    BodyForAgent: prompt,
-    RawBody: prompt,
-    CommandBody: prompt,
+    Body: contextMessage,
+    BodyForAgent: contextMessage,
+    RawBody: contextMessage,
+    CommandBody: contextMessage,
     From: `amiko:post:${postId}:comment:${commentId}`,
     To: `amiko:${account.accountId}`,
     SessionKey: sessionKey,
     AccountId: route.accountId,
-    ChatType: "direct",
+    ChatType: "group",
     ConversationLabel: `comment by ${commenterName} on post ${postId}`,
-    SenderName: commenterName,
-    SenderId: event.senderId,
     Provider: "amiko",
     Surface: "amiko",
     MessageSid: event.id,
@@ -429,6 +779,7 @@ async function processPostCommentEvent(
     OriginatingTo: `amiko:post:${postId}:comment:${commentId}`,
   });
 
+  // Record as context-only — no agent reply for now.
   await core.channel.session.recordInboundSession({
     storePath,
     sessionKey,
@@ -438,71 +789,101 @@ async function processPostCommentEvent(
     },
   });
 
-  const { onModelSelected, ...prefixOptions } = createReplyPrefixOptions({
-    cfg: config,
-    agentId: route.agentId,
-    channel: "amiko",
-    accountId: account.accountId,
+  await persistContextOnlyMessage({
+    account,
+    core,
+    storePath,
+    sessionKey,
+    ctxPayload,
+    rawBody: contextMessage,
+    eventId: event.id,
+    eventTimestamp: event.timestamp,
+    transcriptRole: "user",
+    senderName: commenterName,
+    senderId: event.senderId,
   });
 
   console.log(
-    `[amiko:${account.accountId}] dispatching post-comment reply: sessionKey=${sessionKey}`,
+    `[amiko:${account.accountId}] post-comment recorded as context: postId=${postId} commentId=${commentId}`,
+  );
+}
+
+// ── Comment moderation processing ──────────────────────────────────────────
+
+async function processCommentModerationEvent(
+  event: AmikoInboundEvent,
+  options: Pick<MonitorOptions, "account" | "config" | "runtime">,
+): Promise<void> {
+  const { account, runtime: core, config } = options;
+  const postId = event.postId?.trim();
+  const commentId = event.commentId?.trim();
+  const decision = event.type === "comment.approved" ? "approved" : "rejected";
+
+  console.log(
+    `[amiko:${account.accountId}] processCommentModerationEvent: postId=${postId} commentId=${commentId} decision=${decision}`,
   );
 
-  await core.channel.reply.dispatchReplyWithBufferedBlockDispatcher({
-    ctx: ctxPayload,
+  if (!postId || !commentId) {
+    console.error(`[amiko:${account.accountId}] comment moderation: missing postId or commentId, skipping`);
+    return;
+  }
+
+  const peer = { kind: "direct" as const, id: `post:${postId}` };
+  const route = core.channel.routing.resolveAgentRoute({
     cfg: config,
-    dispatcherOptions: {
-      ...prefixOptions,
-      deliver: async (payload: { text?: string }) => {
-        if (!payload.text) return;
-
-        const text = payload.text.trim();
-        if (text === "<empty-response/>" || text.includes("<empty-response/>")) {
-          console.log(
-            `[amiko:${account.accountId}] agent skipped post-comment reply for ${postId}/${commentId}`,
-          );
-          return;
-        }
-
-        const commentUrl = `${account.platformApiBaseUrl}/api/posts/${postId}/comments`;
-        console.log(
-          `[amiko:${account.accountId}] posting reply comment on ${postId} for comment ${commentId}: ${text.slice(0, 100)}`,
-        );
-
-        try {
-          const res = await fetch(commentUrl, {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${account.token}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({ comment: text }),
-          });
-
-          if (!res.ok) {
-            const errText = await res.text().catch(() => "");
-            console.error(
-              `[amiko:${account.accountId}] reply comment POST failed: ${res.status} ${errText.slice(0, 200)}`,
-            );
-          } else {
-            const data = (await res.json()) as { comment?: { id?: string } };
-            console.log(
-              `[amiko:${account.accountId}] reply comment posted ok: ${data.comment?.id ?? "unknown"}`,
-            );
-          }
-        } catch (err) {
-          console.error(`[amiko:${account.accountId}] reply comment POST error:`, err);
-        }
-      },
-      onError: (err: unknown, info: { kind: string }) => {
-        console.error(`[amiko:${account.accountId}] ${info.kind} post-comment reply error:`, err);
-      },
-    },
-    replyOptions: {
-      onModelSelected,
-    },
+    channel: "amiko",
+    accountId: account.accountId,
+    peer,
   });
+
+  // Same session as the parent post — moderation results share context.
+  const sessionKey = buildAmikoSessionKey(route.agentId, "post", postId);
+
+  const storePath = core.channel.session.resolveStorePath(
+    (config as any).session?.store,
+    { agentId: route.agentId },
+  );
+
+  const commentPreview = event.text?.trim().slice(0, 200) ?? "";
+  const contextMessage = decision === "approved"
+    ? `Your draft comment on post ${postId} was approved and published:\n"${commentPreview}"`
+    : `Your draft comment on post ${postId} was rejected by the owner:\n"${commentPreview}"`;
+
+  const ctxPayload = core.channel.reply.finalizeInboundContext({
+    Body: contextMessage,
+    BodyForAgent: contextMessage,
+    RawBody: contextMessage,
+    CommandBody: contextMessage,
+    From: `amiko:post:${postId}:moderation`,
+    To: `amiko:${account.accountId}`,
+    SessionKey: sessionKey,
+    AccountId: route.accountId,
+    ChatType: "group",
+    ConversationLabel: `comment ${decision} on post ${postId}`,
+    Provider: "amiko",
+    Surface: "amiko",
+    MessageSid: event.id,
+    OriginatingChannel: "amiko",
+    OriginatingTo: `amiko:post:${postId}`,
+  });
+
+  await persistContextOnlyMessage({
+    account,
+    core,
+    storePath,
+    sessionKey,
+    ctxPayload,
+    rawBody: contextMessage,
+    eventId: event.id,
+    eventTimestamp: event.timestamp,
+    transcriptRole: "user",
+    senderName: "System",
+    senderId: undefined,
+  });
+
+  console.log(
+    `[amiko:${account.accountId}] comment moderation recorded: ${decision} commentId=${commentId}`,
+  );
 }
 
 // ── Event dispatcher ────────────────────────────────────────────────────────
@@ -517,6 +898,10 @@ async function processEvent(
 
   if (event.type === "post.comment") {
     return processPostCommentEvent(event, options);
+  }
+
+  if (event.type === "comment.approved" || event.type === "comment.rejected") {
+    return processCommentModerationEvent(event, options);
   }
 
   if (event.type === "message.text" || event.type === "message.image") {

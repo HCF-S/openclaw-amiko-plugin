@@ -33,6 +33,8 @@ export type AmikoEventType =
   | "message.image"
   | "post.published"
   | "post.comment"
+  | "comment.approved"
+  | "comment.rejected"
   | "participant.added";
 
 export type AmikoInboundEvent = {
@@ -52,9 +54,11 @@ export type AmikoInboundEvent = {
   // Channel integration fields
   replyMode?: "as_owner" | "as_agent";
   replyExpected?: boolean;
+  senderIsAgent?: boolean;
   ownerId?: string;
   ownerName?: string;
   sharedAccountPrompt?: string;
+  transcriptRoleHint?: "user" | "assistant";
 
   // Post fields (for post.published / post.comment events)
   postId?: string;
@@ -63,6 +67,7 @@ export type AmikoInboundEvent = {
   authorName?: string;
   authorHandle?: string;
   mediaUrls?: string[];
+  selfAuthored?: boolean;
 };
 
 export type AmikoWebhookPayload = {
