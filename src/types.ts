@@ -52,6 +52,7 @@ export type AmikoInboundEvent = {
   // Channel integration fields
   replyMode?: "as_owner" | "as_agent";
   replyExpected?: boolean;
+  senderIsAgent?: boolean;
   ownerId?: string;
   ownerName?: string;
   sharedAccountPrompt?: string;

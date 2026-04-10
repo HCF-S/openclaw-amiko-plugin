@@ -91,6 +91,13 @@ function buildAmikoReplyContext(event: AmikoInboundEvent): string {
     lines.push(`- Incoming sender: ${event.senderName || event.senderId}`);
   }
 
+  if (event.senderIsAgent) {
+    lines.push(
+      "- NOTE: This message was sent by the other party's AI agent, not a human.",
+      "- To avoid an endless back-and-forth loop between agents, only reply if your response adds genuine value (e.g. answers a question, provides requested info). If the conversation has reached a natural pause or the exchange is purely pleasantries, respond with <empty-response/> to skip.",
+    );
+  }
+
   return lines.join("\n");
 }
 
@@ -499,16 +506,22 @@ async function processChatEvent(
     dispatcherOptions: {
       ...prefixOptions,
       deliver: async (payload: { text?: string; mediaUrl?: string }) => {
-        if (payload.text) {
-          console.log(
-            `[amiko:${account.accountId}] delivering reply (${replyMode}) to ${conversationId}: ${payload.text.slice(0, 100)}`,
-          );
-          const result = await sendTextAmiko(conversationId, payload.text, account, { replyMode });
-          if (!result.ok) {
-            console.error(`[amiko:${account.accountId}] sendTextAmiko failed:`, result);
-          } else {
-            console.log(`[amiko:${account.accountId}] reply delivered ok: messageId=${result.messageId}`);
-          }
+        if (!payload.text) return;
+
+        const text = payload.text.trim();
+        if (text === "<empty-response/>" || text.includes("<empty-response/>")) {
+          console.log(`[amiko:${account.accountId}] agent skipped reply for ${conversationId}`);
+          return;
+        }
+
+        console.log(
+          `[amiko:${account.accountId}] delivering reply (${replyMode}) to ${conversationId}: ${text.slice(0, 100)}`,
+        );
+        const result = await sendTextAmiko(conversationId, text, account, { replyMode });
+        if (!result.ok) {
+          console.error(`[amiko:${account.accountId}] sendTextAmiko failed:`, result);
+        } else {
+          console.log(`[amiko:${account.accountId}] reply delivered ok: messageId=${result.messageId}`);
         }
       },
       onError: (err: unknown, info: { kind: string }) => {
