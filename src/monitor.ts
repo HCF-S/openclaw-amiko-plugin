@@ -1,4 +1,6 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { randomUUID, createHmac, timingSafeEqual } from "node:crypto";
+import fs from "node:fs/promises";
+import path from "node:path";
 import type { ResolvedAmikoAccount, AmikoInboundEvent, AmikoWebhookPayload } from "./types.js";
 import type { PluginRuntime } from "./runtime.js";
 import type { ProbeResult } from "./status.js";
@@ -83,6 +85,248 @@ function buildAmikoReplyContext(event: AmikoInboundEvent, account: ResolvedAmiko
   return lines.join("\n");
 }
 
+const SESSION_TRANSCRIPT_VERSION = 3;
+
+type SessionStoreEntry = {
+  sessionId?: string;
+  sessionFile?: string;
+};
+
+function buildTranscriptEntryId(): string {
+  return randomUUID().replace(/-/g, "").slice(0, 8);
+}
+
+function resolveWorkspaceDirFromStorePath(storePath: string): string {
+  const stateDir = path.resolve(path.dirname(storePath), "..", "..", "..");
+  return path.join(stateDir, "workspace");
+}
+
+function buildSessionHeader(sessionId: string, storePath: string): Record<string, unknown> {
+  return {
+    type: "session",
+    version: SESSION_TRANSCRIPT_VERSION,
+    id: sessionId,
+    timestamp: new Date().toISOString(),
+    cwd: resolveWorkspaceDirFromStorePath(storePath),
+  };
+}
+
+function resolveTranscriptRole(event: Pick<
+  AmikoInboundEvent,
+  "transcriptRoleHint" | "replyMode" | "ownerId" | "senderId"
+>): "user" | "assistant" {
+  if (event.transcriptRoleHint === "user" || event.transcriptRoleHint === "assistant") {
+    return event.transcriptRoleHint;
+  }
+
+  if (
+    event.replyMode === "as_owner" &&
+    event.ownerId?.trim() &&
+    event.senderId?.trim() &&
+    event.ownerId.trim() === event.senderId.trim()
+  ) {
+    return "assistant";
+  }
+
+  return "user";
+}
+
+function parseSessionStoreEntry(
+  store: Record<string, SessionStoreEntry>,
+  sessionKey: string,
+): SessionStoreEntry | undefined {
+  const normalizedKey = sessionKey.trim().toLowerCase();
+  if (!normalizedKey) return undefined;
+  if (store[normalizedKey]) return store[normalizedKey];
+  for (const [candidateKey, candidateEntry] of Object.entries(store)) {
+    if (candidateKey.toLowerCase() === normalizedKey) return candidateEntry;
+  }
+  return undefined;
+}
+
+function readTranscriptState(rawTranscript: string, idempotencyKey?: string): {
+  hasIdempotencyKey: boolean;
+  lastEntryId?: string;
+} {
+  let lastEntryId: string | undefined;
+  let hasIdempotencyKey = false;
+
+  for (const line of rawTranscript.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+
+    try {
+      const entry = JSON.parse(trimmed) as {
+        id?: unknown;
+        message?: { idempotencyKey?: unknown };
+      };
+      if (typeof entry.id === "string" && entry.id.trim()) {
+        lastEntryId = entry.id;
+      }
+      if (
+        idempotencyKey &&
+        typeof entry.message?.idempotencyKey === "string" &&
+        entry.message.idempotencyKey === idempotencyKey
+      ) {
+        hasIdempotencyKey = true;
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  return { hasIdempotencyKey, lastEntryId };
+}
+
+async function appendContextMessageToTranscript(params: {
+  account: ResolvedAmikoAccount;
+  storePath: string;
+  sessionKey: string;
+  eventId?: string;
+  eventTimestamp: number;
+  transcriptRole: "user" | "assistant";
+  rawBody: string;
+}): Promise<void> {
+  const { account, storePath, sessionKey, eventId, eventTimestamp, transcriptRole, rawBody } = params;
+
+  let storeRaw: string;
+  try {
+    storeRaw = await fs.readFile(storePath, "utf8");
+  } catch (err) {
+    console.error(`[amiko:${account.accountId}] failed to read session store for transcript append:`, err);
+    return;
+  }
+
+  let store: Record<string, SessionStoreEntry>;
+  try {
+    const parsed = JSON.parse(storeRaw) as Record<string, SessionStoreEntry>;
+    store = parsed && typeof parsed === "object" ? parsed : {};
+  } catch (err) {
+    console.error(`[amiko:${account.accountId}] failed to parse session store for transcript append:`, err);
+    return;
+  }
+
+  const sessionEntry = parseSessionStoreEntry(store, sessionKey);
+  const sessionId = sessionEntry?.sessionId?.trim();
+
+  if (!sessionId) {
+    console.warn(
+      `[amiko:${account.accountId}] transcript append skipped: missing sessionId for ${sessionKey}`,
+    );
+    return;
+  }
+
+  const sessionFile = sessionEntry?.sessionFile?.trim()
+    || path.join(path.dirname(storePath), `${sessionId}.jsonl`);
+  const text = rawBody || "[non-text message]";
+  const idempotencyKey = eventId?.trim() ? `amiko:${eventId.trim()}` : undefined;
+
+  let rawTranscript = "";
+  try {
+    rawTranscript = await fs.readFile(sessionFile, "utf8");
+  } catch (err) {
+    const code = err && typeof err === "object" && "code" in err ? String((err as any).code) : "";
+    if (code !== "ENOENT") {
+      console.error(`[amiko:${account.accountId}] failed to read transcript ${sessionFile}:`, err);
+      return;
+    }
+  }
+
+  const transcriptState = readTranscriptState(rawTranscript, idempotencyKey);
+  if (transcriptState.hasIdempotencyKey) {
+    console.log(
+      `[amiko:${account.accountId}] transcript append deduped: sessionKey=${sessionKey} eventId=${eventId ?? "unknown"}`,
+    );
+    return;
+  }
+
+  if (!rawTranscript) {
+    await fs.mkdir(path.dirname(sessionFile), { recursive: true });
+    await fs.writeFile(
+      sessionFile,
+      `${JSON.stringify(buildSessionHeader(sessionId, storePath))}\n`,
+      { encoding: "utf8", mode: 0o600 },
+    );
+    rawTranscript = "";
+  }
+
+  const entry = {
+    type: "message",
+    id: buildTranscriptEntryId(),
+    parentId: transcriptState.lastEntryId ?? null,
+    timestamp: new Date().toISOString(),
+    message: {
+      role: transcriptRole,
+      content: [{ type: "text", text }],
+      timestamp: eventTimestamp,
+      ...(idempotencyKey ? { idempotencyKey } : {}),
+      ...(transcriptRole === "assistant"
+        ? {
+            api: "openai-responses",
+            provider: "openclaw",
+            model: "amiko-context-mirror",
+            usage: {
+              input: 0,
+              output: 0,
+              cacheRead: 0,
+              cacheWrite: 0,
+              totalTokens: 0,
+              cost: {
+                input: 0,
+                output: 0,
+                cacheRead: 0,
+                cacheWrite: 0,
+                total: 0,
+              },
+            },
+            stopReason: "stop",
+          }
+        : {}),
+    },
+  };
+
+  await fs.appendFile(sessionFile, `${JSON.stringify(entry)}\n`, {
+    encoding: "utf8",
+    mode: 0o600,
+  });
+
+  console.log(
+    `[amiko:${account.accountId}] context appended to transcript: sessionKey=${sessionKey} role=${transcriptRole} sessionFile=${sessionFile}`,
+  );
+}
+
+async function persistContextOnlyMessage(params: {
+  account: ResolvedAmikoAccount;
+  core: PluginRuntime;
+  storePath: string;
+  sessionKey: string;
+  ctxPayload: unknown;
+  rawBody: string;
+  eventId?: string;
+  eventTimestamp: number;
+  transcriptRole: "user" | "assistant";
+}): Promise<void> {
+  const { account, core, storePath, sessionKey, ctxPayload, rawBody, eventId, eventTimestamp, transcriptRole } = params;
+
+  await core.channel.session.recordInboundSession({
+    storePath,
+    sessionKey,
+    ctx: ctxPayload,
+    onRecordError: (err: unknown) => {
+      console.error(`[amiko:${account.accountId}] recordInboundSession error:`, err);
+    },
+  });
+  await appendContextMessageToTranscript({
+    account,
+    storePath,
+    sessionKey,
+    eventId,
+    eventTimestamp,
+    transcriptRole,
+    rawBody,
+  });
+}
+
 // ── Chat message processing ─────────────────────────────────────────────────
 
 async function processChatEvent(
@@ -164,17 +408,21 @@ async function processChatEvent(
 
   // ── replyExpected: false → persist context only, no agent response ─────────
   if (!replyExpected) {
+    const transcriptRole = resolveTranscriptRole(event);
     console.log(
-      `[amiko:${account.accountId}] recording context only (no reply): ${rawBody.slice(0, 100)}`,
+      `[amiko:${account.accountId}] recording context only (no reply): role=${transcriptRole} ${rawBody.slice(0, 100)}`,
     );
 
-    await core.channel.session.recordInboundSession({
+    await persistContextOnlyMessage({
+      account,
+      core,
       storePath,
       sessionKey,
-      ctx: ctxPayload,
-      onRecordError: (err: unknown) => {
-        console.error(`[amiko:${account.accountId}] recordInboundSession error:`, err);
-      },
+      ctxPayload,
+      rawBody,
+      eventId: event.id,
+      eventTimestamp: event.timestamp,
+      transcriptRole,
     });
     return;
   }

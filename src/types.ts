@@ -55,6 +55,7 @@ export type AmikoInboundEvent = {
   ownerId?: string;
   ownerName?: string;
   sharedAccountPrompt?: string;
+  transcriptRoleHint?: "user" | "assistant";
 
   // Post fields (for post.published / post.comment events)
   postId?: string;
