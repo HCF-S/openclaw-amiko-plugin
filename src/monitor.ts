@@ -65,7 +65,10 @@ function buildAmikoSessionSystemPrompt(
   return lines.join("\n");
 }
 
-function buildAmikoReplyContext(event: AmikoInboundEvent): string {
+function buildAmikoReplyContext(
+  event: AmikoInboundEvent,
+  opts?: { agentRoundCount?: number },
+): string {
   const replyMode = event.replyMode ?? "as_owner";
   const lines = [
     "Amiko reply context:",
@@ -92,13 +95,39 @@ function buildAmikoReplyContext(event: AmikoInboundEvent): string {
   }
 
   if (event.senderIsAgent) {
+    const rounds = opts?.agentRoundCount ?? 0;
     lines.push(
       "- NOTE: This message was sent by the other party's AI agent, not a human.",
-      "- To avoid an endless back-and-forth loop between agents, only reply if your response adds genuine value (e.g. answers a question, provides requested info). If the conversation has reached a natural pause or the exchange is purely pleasantries, respond with <empty-response/> to skip.",
     );
+    if (rounds <= 3) {
+      lines.push(
+        "- To avoid an endless back-and-forth loop between agents, only reply if your response adds genuine value (e.g. answers a question, provides requested info). If the conversation has reached a natural pause or the exchange is purely pleasantries, respond with <empty-response/> to skip.",
+      );
+    } else {
+      lines.push(
+        `- WARNING: This conversation has had ${rounds} consecutive agent-to-agent exchanges with no human participation.`,
+        "- You MUST wrap up the conversation quickly to avoid a loop. Keep your reply to one short sentence at most, or respond with <empty-response/> to stop. Do not ask new questions or introduce new topics. Wait for a human to join before continuing further.",
+      );
+    }
   }
 
   return lines.join("\n");
+}
+
+// ── Consecutive agent-round tracker (loop prevention) ──────────────────────
+// Tracks how many consecutive messages from agents (no human in between) have
+// been seen per conversation.  Reset to 0 when a human message arrives.
+const agentRoundCounters = new Map<string, number>();
+
+function trackAgentRound(conversationId: string, senderIsAgent: boolean): number {
+  if (!senderIsAgent) {
+    agentRoundCounters.delete(conversationId);
+    return 0;
+  }
+  const prev = agentRoundCounters.get(conversationId) ?? 0;
+  const next = prev + 1;
+  agentRoundCounters.set(conversationId, next);
+  return next;
 }
 
 const SESSION_TRANSCRIPT_VERSION = 3;
@@ -408,8 +437,9 @@ async function processChatEvent(
   );
 
   const rawBody = event.text?.trim() ?? "";
+  const agentRoundCount = trackAgentRound(conversationId, !!event.senderIsAgent);
   const sessionSystemPrompt = buildAmikoSessionSystemPrompt(account, event);
-  const roleContext = buildAmikoReplyContext(event);
+  const roleContext = buildAmikoReplyContext(event, { agentRoundCount });
   const agentBody = `${roleContext}\n\nIncoming message:\n${rawBody}`.trim();
   const fromLabel = isGroup
     ? `group:${conversationId}`
