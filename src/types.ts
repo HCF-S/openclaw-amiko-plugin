@@ -36,7 +36,7 @@ export type AmikoEventType =
   | "comment.approved"
   | "comment.rejected"
   | "participant.added"
-  | "platform.activity";
+  | "platform.notification";
 
 export type AmikoInboundEvent = {
   id: string;

@@ -1009,7 +1009,7 @@ async function processEvent(
     return processChatEvent(event, options);
   }
 
-  if (event.type === "platform.activity") {
+  if (event.type === "platform.notification") {
     return processInboxEvent(event, options);
   }
 
