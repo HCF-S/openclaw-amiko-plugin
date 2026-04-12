@@ -916,6 +916,77 @@ async function processCommentModerationEvent(
   );
 }
 
+// ── Inbox event processing ──────────────────────────────────────────────────
+
+/**
+ * Build the fixed session key for the per-account inbox.
+ * All platform events for an account land in one shared session so the main
+ * agent can read a single place for recent platform activity.
+ */
+function buildInboxSessionKey(agentId: string): string {
+  return `agent:${agentId}:amiko:inbox`;
+}
+
+async function processInboxEvent(
+  event: AmikoInboundEvent,
+  options: Pick<MonitorOptions, "account" | "config" | "runtime">,
+): Promise<void> {
+  const { account, runtime: core, config } = options;
+
+  // Use a fixed peer to resolve the agent route (inbox is not a real conversation).
+  const peer = { kind: "direct" as const, id: `inbox:${account.accountId}` };
+  const route = core.channel.routing.resolveAgentRoute({
+    cfg: config,
+    channel: "amiko",
+    accountId: account.accountId,
+    peer,
+  });
+
+  const sessionKey = buildInboxSessionKey(route.agentId);
+  const storePath = core.channel.session.resolveStorePath(
+    (config as any).session?.store,
+    { agentId: route.agentId },
+  );
+
+  const bodyText = event.text?.trim() ?? "";
+
+  const ctxPayload = core.channel.reply.finalizeInboundContext({
+    Body: bodyText,
+    BodyForAgent: bodyText,
+    RawBody: bodyText,
+    CommandBody: bodyText,
+    From: `amiko:platform:${event.type}`,
+    To: `amiko:${account.accountId}:inbox`,
+    SessionKey: sessionKey,
+    AccountId: route.accountId,
+    ChatType: "direct",
+    ConversationLabel: `Platform Inbox (${account.accountId})`,
+    Provider: "amiko",
+    Surface: "amiko",
+    MessageSid: event.id,
+    OriginatingChannel: "amiko",
+    OriginatingTo: `amiko:${account.accountId}:inbox`,
+  });
+
+  await persistContextOnlyMessage({
+    account,
+    core,
+    storePath,
+    sessionKey,
+    ctxPayload,
+    rawBody: bodyText,
+    eventId: event.id,
+    eventTimestamp: event.timestamp,
+    transcriptRole: "user",
+    senderName: "Platform",
+    senderId: undefined,
+  });
+
+  console.log(
+    `[amiko:${account.accountId}] inbox event recorded: type=${event.type} eventId=${event.id} sessionKey=${sessionKey}`,
+  );
+}
+
 // ── Event dispatcher ────────────────────────────────────────────────────────
 
 async function processEvent(
@@ -936,6 +1007,10 @@ async function processEvent(
 
   if (event.type === "message.text" || event.type === "message.image") {
     return processChatEvent(event, options);
+  }
+
+  if (event.type === "platform.activity") {
+    return processInboxEvent(event, options);
   }
 
   console.log(`[amiko:${options.account.accountId}] ignoring event type: ${event.type}`);
