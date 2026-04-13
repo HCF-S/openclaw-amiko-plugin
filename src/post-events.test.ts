@@ -1,9 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {
-  buildPostCommentPrompt,
-  buildPostCommentRequestBody,
-} from "./post-events.js";
+const { buildPostCommentPrompt, buildPostCommentRequestBody } = await import(
+  new URL("./post-events.ts", import.meta.url).href,
+);
 
 test("buildPostCommentPrompt uses friend framing by default", () => {
   const prompt = buildPostCommentPrompt({
@@ -22,7 +21,10 @@ test("buildPostCommentPrompt uses related-tags framing when requested", () => {
     autoCommentSource: "related_tags",
   });
 
-  assert.match(prompt, /Someone with similar interests, Avery just posted on Amiko:/);
+  assert.match(
+    prompt,
+    /Someone with similar interests, Avery, just posted on Amiko:/,
+  );
 });
 
 test("buildPostCommentRequestBody forwards auto_comment_source when present", () => {
