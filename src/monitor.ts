@@ -254,14 +254,17 @@ async function appendContextMessageToTranscript(params: {
   let sessionId = sessionEntry?.sessionId?.trim();
 
   // After a fresh recordInboundSession the store file may not be flushed yet.
-  // Retry once after a short delay to handle the first-create race.
+  // Retry with increasing delays to handle the first-create race.
   if (!sessionId) {
-    await new Promise((r) => setTimeout(r, 500));
-    try {
-      store = await readStore();
-      sessionEntry = parseSessionStoreEntry(store, sessionKey);
-      sessionId = sessionEntry?.sessionId?.trim();
-    } catch { /* ignore retry failure */ }
+    for (const delayMs of [200, 500, 1000, 2000]) {
+      await new Promise((r) => setTimeout(r, delayMs));
+      try {
+        store = await readStore();
+        sessionEntry = parseSessionStoreEntry(store, sessionKey);
+        sessionId = sessionEntry?.sessionId?.trim();
+        if (sessionId) break;
+      } catch { /* ignore retry failure */ }
+    }
   }
 
   if (!sessionId) {
