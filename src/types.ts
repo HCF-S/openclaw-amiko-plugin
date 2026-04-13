@@ -26,6 +26,8 @@ export type ResolvedAmikoAccount = {
   config: AmikoAccountConfig;
 };
 
+export type AutoCommentSource = "friend" | "related_tags";
+
 // Platform API types
 
 export type AmikoEventType =
@@ -69,6 +71,7 @@ export type AmikoInboundEvent = {
   authorHandle?: string;
   mediaUrls?: string[];
   selfAuthored?: boolean;
+  autoCommentSource?: AutoCommentSource;
 };
 
 export type AmikoWebhookPayload = {
