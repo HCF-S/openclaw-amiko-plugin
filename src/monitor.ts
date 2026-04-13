@@ -236,25 +236,33 @@ async function appendContextMessageToTranscript(params: {
 }): Promise<void> {
   const { account, storePath, sessionKey, eventId, eventTimestamp, transcriptRole, rawBody, senderName, senderId } = params;
 
-  let storeRaw: string;
+  const readStore = async (): Promise<Record<string, SessionStoreEntry>> => {
+    const raw = await fs.readFile(storePath, "utf8");
+    const parsed = JSON.parse(raw) as Record<string, SessionStoreEntry>;
+    return parsed && typeof parsed === "object" ? parsed : {};
+  };
+
+  let store: Record<string, SessionStoreEntry>;
   try {
-    storeRaw = await fs.readFile(storePath, "utf8");
+    store = await readStore();
   } catch (err) {
     console.error(`[amiko:${account.accountId}] failed to read session store for transcript append:`, err);
     return;
   }
 
-  let store: Record<string, SessionStoreEntry>;
-  try {
-    const parsed = JSON.parse(storeRaw) as Record<string, SessionStoreEntry>;
-    store = parsed && typeof parsed === "object" ? parsed : {};
-  } catch (err) {
-    console.error(`[amiko:${account.accountId}] failed to parse session store for transcript append:`, err);
-    return;
-  }
+  let sessionEntry = parseSessionStoreEntry(store, sessionKey);
+  let sessionId = sessionEntry?.sessionId?.trim();
 
-  const sessionEntry = parseSessionStoreEntry(store, sessionKey);
-  const sessionId = sessionEntry?.sessionId?.trim();
+  // After a fresh recordInboundSession the store file may not be flushed yet.
+  // Retry once after a short delay to handle the first-create race.
+  if (!sessionId) {
+    await new Promise((r) => setTimeout(r, 500));
+    try {
+      store = await readStore();
+      sessionEntry = parseSessionStoreEntry(store, sessionKey);
+      sessionId = sessionEntry?.sessionId?.trim();
+    } catch { /* ignore retry failure */ }
+  }
 
   if (!sessionId) {
     console.warn(
