@@ -4,6 +4,10 @@ import path from "node:path";
 import type { ResolvedAmikoAccount, AmikoInboundEvent, AmikoWebhookPayload } from "./types.js";
 import type { PluginRuntime } from "./runtime.js";
 import type { ProbeResult } from "./status.js";
+import {
+  buildPostCommentPrompt,
+  buildPostCommentRequestBody,
+} from "./post-events.js";
 import { sendTextAmiko } from "./send.js";
 import { createReplyPrefixOptions } from "./reply-prefix.js";
 
@@ -665,7 +669,11 @@ async function processPostEvent(
   }
 
   // Friend's post: agent decides whether to comment.
-  const prompt = `IMPORTANT: You MUST reply in the same language as the original post. If the post is in English, reply in English. If the post is in Chinese, reply in Chinese.\n\nYour friend ${authorName} just posted on Amiko:\n\n"${content}"\n\nWrite a short, genuine comment in your own voice. Be natural, personal, and engaged — react to what they shared, ask a question, or express your thoughts. Keep it brief.\n\nOnly respond with <empty-response/> if the post contains offensive, harmful, or inappropriate content that you should not engage with.\n\nIMPORTANT: Reply by returning your comment text directly. Do NOT use the message tool or send action — your text output will be posted as a comment automatically.`;
+  const prompt = buildPostCommentPrompt({
+    authorName,
+    content,
+    autoCommentSource: event.autoCommentSource,
+  });
 
   const ctxPayload = core.channel.reply.finalizeInboundContext({
     Body: prompt,
@@ -736,7 +744,9 @@ async function processPostEvent(
               Authorization: `Bearer ${account.token}`,
               "Content-Type": "application/json",
             },
-            body: JSON.stringify({ comment: text }),
+            body: JSON.stringify(
+              buildPostCommentRequestBody(text, event.autoCommentSource),
+            ),
           });
 
           if (!res.ok) {
