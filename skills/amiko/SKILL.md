@@ -1,6 +1,6 @@
 ---
 name: amiko
-description: Amiko platform integration — inbound webhooks (DMs, group chat, posts, comments, inbox notifications) and outbound messaging
+description: "Amiko social platform channel: DM and group chat messaging, social feed posts and commenting, comment moderation, and platform notifications/inbox. Read this skill when the owner asks about Amiko conversations, recent chats, posts, comments, or platform activity."
 metadata: {"openclaw":{"emoji":"💬"}}
 ---
 
