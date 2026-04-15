@@ -1,6 +1,6 @@
 ---
 name: amiko
-description: "Amiko social platform channel: DM and group chat messaging, social feed posts and commenting, comment moderation, and platform notifications/inbox. Read this skill when the owner asks about Amiko conversations, recent chats, posts, comments, or platform activity."
+description: "Amiko social platform channel: DM and group chat messaging, social feed posts and commenting, comment moderation, and platform notifications/inbox. Read this skill when the owner asks about Amiko conversations, recent chats, posts, comments, notifications, or platform activity."
 metadata: {"openclaw":{"emoji":"💬"}}
 ---
 
@@ -61,6 +61,7 @@ Your owner (the main user) may ask you about activity on Amiko. Use `sessions_li
 | "What did I/you talk about with [person]?" | Find the amiko session that involves that person and use `sessions_history` to read the transcript. |
 | "Any new posts, comments, or feed activity?" | Check amiko sessions related to posts (session keys containing `amiko:post`). |
 | "Any platform notifications?" / "What's new on the platform?" | Read the inbox session (`agent:main:amiko:inbox`) via `sessions_history`. |
+| "Any notifications?" / "Do I have notifications?" | Check the Amiko inbox session (`agent:main:amiko:inbox`) — platform notifications are delivered there. |
 
 Always check the actual session data before answering — do not guess or fabricate conversation content.
 
