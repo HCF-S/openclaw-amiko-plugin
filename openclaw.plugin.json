@@ -5,6 +5,7 @@
   "version": "0.3.5",
   "channels": ["amiko"],
   "skills": ["./skills"],
+  "hooks": ["./hooks"],
   "configSchema": {
     "type": "object",
     "additionalProperties": false,
