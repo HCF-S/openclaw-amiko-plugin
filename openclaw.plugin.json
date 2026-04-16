@@ -2,7 +2,7 @@
   "id": "openclaw-amiko",
   "name": "Amiko",
   "description": "OpenClaw channel plugin for Amiko platform — direct and group chat via webhook.",
-  "version": "0.3.5",
+  "version": "0.3.6-beta.0",
   "channels": ["amiko"],
   "skills": ["./skills"],
   "hooks": ["./hooks"],
