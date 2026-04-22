@@ -87,6 +87,11 @@ export const amikoPlugin = {
     resolveRequireMention(): boolean {
       return true;
     },
+    resolveToolPolicy() {
+      return {
+        allow: ["message", "memory_read"],
+      };
+    },
   },
 
   outbound: {
