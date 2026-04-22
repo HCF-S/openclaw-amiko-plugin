@@ -34,8 +34,11 @@ export type MonitorHandle = {
  * This ensures every Amiko conversation (DM or group) gets its own isolated
  * session regardless of how the user configures dmScope.
  */
-function buildAmikoSessionKey(agentId: string, kind: "direct" | "group" | "post", id: string): string {
-  return `agent:${agentId}:amiko:${kind}:${id}`.toLowerCase();
+function buildAmikoSessionKey(agentId: string, _kind: "direct" | "group" | "post", id: string): string {
+  // Always use "group" kind so openclaw's group tool policy applies to all
+  // amiko sessions (direct, group, post). The actual conversation type is
+  // conveyed via ConversationLabel / ChatType metadata instead.
+  return `agent:${agentId}:amiko:group:${id}`.toLowerCase();
 }
 
 function verifyHmacSignature(secret: string, body: string | Buffer, signature: string): boolean {
