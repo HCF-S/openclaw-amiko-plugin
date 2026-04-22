@@ -434,7 +434,10 @@ async function processChatEvent(
     return;
   }
 
-  const peer = { kind: event.conversationType as "direct" | "group", id: conversationId };
+  // Use "group" kind for all chat peers so openclaw's group tool policy applies
+  // to both DM and group conversations (restricting exec, readFile, etc.).
+  // The session key still distinguishes direct vs group via buildAmikoSessionKey.
+  const peer = { kind: "group" as const, id: conversationId };
 
   const route = core.channel.routing.resolveAgentRoute({
     cfg: config,
@@ -602,7 +605,7 @@ async function processPostEvent(
 
   if (!content) return;
 
-  const peer = { kind: "direct" as const, id: `post:${postId}` };
+  const peer = { kind: "group" as const, id: `post:${postId}` };
   const route = core.channel.routing.resolveAgentRoute({
     cfg: config,
     channel: "amiko",
@@ -795,7 +798,7 @@ async function processPostCommentEvent(
 
   if (!content) return;
 
-  const peer = { kind: "direct" as const, id: `post:${postId}` };
+  const peer = { kind: "group" as const, id: `post:${postId}` };
   const route = core.channel.routing.resolveAgentRoute({
     cfg: config,
     channel: "amiko",
@@ -879,7 +882,7 @@ async function processCommentModerationEvent(
     return;
   }
 
-  const peer = { kind: "direct" as const, id: `post:${postId}` };
+  const peer = { kind: "group" as const, id: `post:${postId}` };
   const route = core.channel.routing.resolveAgentRoute({
     cfg: config,
     channel: "amiko",
@@ -955,7 +958,7 @@ async function processInboxEvent(
   const { account, runtime: core, config } = options;
 
   // Use a fixed peer to resolve the agent route (inbox is not a real conversation).
-  const peer = { kind: "direct" as const, id: `inbox:${account.accountId}` };
+  const peer = { kind: "group" as const, id: `inbox:${account.accountId}` };
   const route = core.channel.routing.resolveAgentRoute({
     cfg: config,
     channel: "amiko",
