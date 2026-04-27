@@ -128,11 +128,11 @@ export const amikoPlugin = {
     },
 
     async sendText({ to, text, account }: { to: string; text: string; account: ResolvedAmikoAccount; cfg: unknown; accountId: string }) {
-      return sendTextAmiko(to, text, account);
+      return sendTextAmiko(to, text, account, { replyMode: "as_owner" });
     },
 
     async sendMedia({ to, text, mediaUrl, account }: { to: string; text: string; mediaUrl: string; cfg: unknown; accountId: string; account: ResolvedAmikoAccount }) {
-      return sendMediaAmiko(to, text, mediaUrl, undefined, account);
+      return sendMediaAmiko(to, text, mediaUrl, undefined, account, { replyMode: "as_owner" });
     },
   },
 
