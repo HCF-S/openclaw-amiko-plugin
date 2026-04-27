@@ -65,14 +65,9 @@ Your owner (the main user) may ask you about activity on Amiko. Use `sessions_li
 
 Always check the actual session data before answering — do not guess or fabricate conversation content.
 
-## Sending Messages to Amiko Contacts
+## Sending Messages & Listing Conversations
 
-When your owner asks you to send a message to an Amiko contact or conversation, use the **message** tool (channel outbound), NOT `sessions_send`.
-
-- **Target format**: `amiko:{conversationId}`
-- The message tool delivers directly through the Amiko channel as the owner (first person).
-- `sessions_send` triggers agent-to-agent announce mode, which is NOT what the owner wants — use it only for inter-agent coordination, never for sending messages on behalf of the owner.
-- To find the right conversation ID, use `sessions_list` to look up amiko sessions — the conversation ID is the last segment of the session key (e.g. `agent:main:amiko:group:cmnwmj0ah000004k0a069t14g` → conversation ID is `cmnwmj0ah000004k0a069t14g`).
+To list conversations on the Amiko platform or send a message to a conversation, use the **amiko CLI** (`amiko` command via exec). Do NOT use `sessions_send` or the `message` tool for this purpose.
 
 ## Tips
 
