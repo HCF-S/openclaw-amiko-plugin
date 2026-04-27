@@ -46,6 +46,7 @@ export type AmikoInboundEvent = {
   accountId: string;
   conversationId: string;
   conversationType: "direct" | "group";
+  conversationTitle?: string;
   senderId: string;
   senderName: string;
   timestamp: number; // Unix ms

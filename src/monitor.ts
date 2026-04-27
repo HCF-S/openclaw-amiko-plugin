@@ -462,9 +462,8 @@ async function processChatEvent(
   const sessionSystemPrompt = buildAmikoSessionSystemPrompt(account, event);
   const roleContext = buildAmikoReplyContext(event, { agentRoundCount });
   const agentBody = `${roleContext}\n\nIncoming message:\n${rawBody}`.trim();
-  const fromLabel = isGroup
-    ? `group:${conversationId}`
-    : (event.senderName || `user:${event.senderId}`);
+  const fromLabel = event.conversationTitle
+    || (isGroup ? `group:${conversationId}` : (event.senderName || `user:${event.senderId}`));
 
   const previousTimestamp = core.channel.session.readSessionUpdatedAt({
     storePath,
