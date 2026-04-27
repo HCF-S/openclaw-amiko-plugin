@@ -7,13 +7,15 @@ const fs = require("fs");
 const path = require("path");
 const { execSync } = require("child_process");
 
-const OPENCLAW_HOME = process.env.OPENCLAW_HOME || "/data/.openclaw";
-const EXTENSIONS_DIR = path.join(OPENCLAW_HOME, "extensions");
+const OPENCLAW_DATA = process.env.OPENCLAW_HOME
+  ? path.join(process.env.OPENCLAW_HOME, ".openclaw")
+  : "/data/.openclaw";
+const EXTENSIONS_DIR = path.join(OPENCLAW_DATA, "extensions");
 const PLUGIN_ID = "openclaw-amiko";
 const TARGET_DIR = path.join(EXTENSIONS_DIR, PLUGIN_ID);
 
 function isOpenclawEnvironment() {
-  return fs.existsSync(OPENCLAW_HOME) && fs.existsSync(EXTENSIONS_DIR);
+  return fs.existsSync(OPENCLAW_DATA) && fs.existsSync(EXTENSIONS_DIR);
 }
 
 function getPackageRoot() {
