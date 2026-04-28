@@ -62,9 +62,13 @@ function main() {
   if (fs.existsSync(existingPkgJson)) {
     try {
       const existing = JSON.parse(fs.readFileSync(existingPkgJson, "utf8"));
-      if (existing.version === version) {
+      const depsIntact = fs.existsSync(path.join(TARGET_DIR, "node_modules"));
+      if (existing.version === version && depsIntact) {
         console.log(`[openclaw-amiko] v${version} already installed in extensions, skipping.`);
         return;
+      }
+      if (existing.version === version) {
+        console.log(`[openclaw-amiko] v${version} present but node_modules missing, repairing.`);
       }
       console.log(`[openclaw-amiko] Upgrading ${existing.version} → ${version}`);
     } catch {}
