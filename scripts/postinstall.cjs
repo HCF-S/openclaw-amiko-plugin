@@ -87,7 +87,7 @@ function main() {
 
   // Install production dependencies
   try {
-    execSync("npm install --omit=dev", {
+    execSync("npm install --omit=dev --ignore-scripts --no-package-lock", {
       cwd: TARGET_DIR,
       stdio: "pipe",
       timeout: 60_000,
